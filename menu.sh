@@ -37,7 +37,7 @@ echo -e "${A}──────────────────────�
 echo -e " 🔹 S.O: ${C}$S_OS${N}  🔹 Base:${C}$S_ARCH${N}  🔹 CPU's:${C}$S_CPU${N}"
 echo -e " 🔹 IP:  ${V}$IP_VPS${N}  🔹 FECHA: ${A}$FECHA_ACT${N}"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " Key: ${V}Verified [ Sabana de Torres © ] (V5.6)${N}"
+echo -e " Key: ${V}Verified [ Sabana de Torres © ] (V5.7)${N}"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 echo -e " ${M}🟢 PUERTOS ACTIVOS:${N}"
 echo -e " $STR_PORTS"
@@ -340,11 +340,136 @@ echo -e "${R}BadVPN Desinstalado.${N}"; read -p "Enter..." ;;
 esac
 done
 }
+menu_v2ray() {
+while true; do
+clear
+P_V2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+echo -e "${C}================================================${N}"
+echo -e "     ${A}⚜️  V2RAY / XRAY MANAGER (WebSocket) ⚜️${N}"
+echo -e "${C}================================================${N}"
+echo -e " Estado actual: $P_V2"
+echo -e "${A}────────────────────────────────────────────────────────${N}"
+echo -e " ${V}[1]${N} 🟢 Instalar V2Ray/Xray (Modo WebSocket)"
+echo -e " ${A}[2]${N} ➕ Generar Nuevo Usuario (UUID)"
+echo -e " ${V}[3]${N} 👁️  Ver mis Datos y Link de Conexión"
+echo -e " ${R}[4]${N} 🗑️  Desinstalar Todo"
+echo -e " ${C}[0]${N} ↩️  Volver al Menú Principal"
+echo -e "${A}────────────────────────────────────────────────────────${N}"
+read -p " ► Opcion : " op_v2
+case $op_v2 in
+1)
+    clear
+    echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY) ===${N}"
+    apt-get update -y >/dev/null 2>&1
+    apt-get install -y jq uuid-runtime curl >/dev/null 2>&1
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
+    
+    echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===${N}"
+    read -p " ► Puerto a usar (Ej: 80 o 443): " pt_v2; pt_v2=${pt_v2:-80}
+    read -p " ► Tu Dominio/SNI (Ej: midominio.com o IP): " dom_v2; dom_v2=${dom_v2:-$IP_VPS}
+    UUID=$(uuidgen)
+    
+    mkdir -p /usr/local/etc/xray
+    cat <<EOF > /usr/local/etc/xray/config.json
+{
+  "log": { "loglevel": "warning" },
+  "inbounds": [{
+    "port": $pt_v2,
+    "listen": "0.0.0.0",
+    "protocol": "vmess",
+    "settings": {
+      "clients": [ { "id": "$UUID", "alterId": 0 } ]
+    },
+    "streamSettings": {
+      "network": "ws",
+      "wsSettings": { "path": "/osmaca" }
+    }
+  }],
+  "outbounds": [{ "protocol": "freedom", "settings": {} }]
+}
+EOF
+    echo "$dom_v2" > /usr/local/etc/xray/dominio.txt
+    echo "$pt_v2" > /usr/local/etc/xray/puerto.txt
+    echo "$UUID" > /usr/local/etc/xray/uuid.txt
+    
+    systemctl restart xray
+    systemctl enable xray >/dev/null 2>&1
+    ufw allow $pt_v2/tcp >/dev/null 2>&1
+    
+    echo -e "\n${V}¡V2Ray Instalado y Activo!${N}"
+    echo -e "Dominio configurado: $dom_v2"
+    echo -e "Puerto configurado: $pt_v2"
+    echo -e "UUID: $UUID"
+    read -p " ► Enter para continuar..." ;;
+2)
+    if [ ! -f /usr/local/etc/xray/config.json ]; then
+        echo -e "${R}V2Ray no está instalado. Instálalo primero (Opción 1).${N}"; read -p "Enter..."; continue
+    fi
+    UUID=$(uuidgen)
+    sed -i -E "s/\"id\": \".*\"/\"id\": \"$UUID\"/" /usr/local/etc/xray/config.json
+    echo "$UUID" > /usr/local/etc/xray/uuid.txt
+    systemctl restart xray
+    echo -e "${V}¡Nuevo UUID generado y configurado exitosamente!${N}"
+    echo -e "Nuevo UUID: $UUID"
+    read -p " ► Enter para continuar..." ;;
+3)
+    if [ ! -f /usr/local/etc/xray/config.json ]; then
+        echo -e "${R}V2Ray no está instalado.${N}"; read -p "Enter..."; continue
+    fi
+    dom_v2=$(cat /usr/local/etc/xray/dominio.txt)
+    pt_v2=$(cat /usr/local/etc/xray/puerto.txt)
+    UUID=$(cat /usr/local/etc/xray/uuid.txt)
+    
+    TLS_STATUS=""
+    if [ "$pt_v2" == "443" ] || [ "$pt_v2" == "444" ]; then TLS_STATUS="tls"; fi
+    
+    cat <<EOF > /tmp/vmess.json
+{
+  "v": "2",
+  "ps": "Osmaca-V2Ray",
+  "add": "$dom_v2",
+  "port": "$pt_v2",
+  "id": "$UUID",
+  "aid": "0",
+  "scy": "auto",
+  "net": "ws",
+  "type": "none",
+  "host": "$dom_v2",
+  "path": "/osmaca",
+  "tls": "$TLS_STATUS"
+}
+EOF
+    VMESS_BASE64=$(cat /tmp/vmess.json | base64 -w 0)
+    VMESS_LINK="vmess://$VMESS_BASE64"
+    
+    clear
+    echo -e "${C}=== TUS DATOS DE V2RAY ===${N}"
+    echo -e " 🔹 Dominio / Host : ${V}$dom_v2${N}"
+    echo -e " 🔹 Puerto         : ${V}$pt_v2${N}"
+    echo -e " 🔹 UUID           : ${A}$UUID${N}"
+    echo -e " 🔹 Protocolo      : WebSocket (WS)"
+    echo -e " 🔹 Path           : /osmaca"
+    echo -e "${C}================================================${N}"
+    echo -e " 🔗 ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):${N}\n"
+    echo -e "${A}$VMESS_LINK${N}\n"
+    read -p " ► Enter para continuar..." ;;
+4)
+    systemctl stop xray >/dev/null 2>&1
+    systemctl disable xray >/dev/null 2>&1
+    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove >/dev/null 2>&1
+    rm -rf /usr/local/etc/xray
+    echo -e "${R}V2Ray / Xray Desinstalado completamente.${N}"
+    read -p " ► Enter para continuar..." ;;
+0) break ;;
+esac
+done
+}
 menu_protocolos() {
 while true; do
 clear
 P22=$(ep 22); P80=$(es proxypy); PSSL=$(es stunnel4); PPY=$(es proxypy); PUDP=$(es udp-custom); PFB=$(es fail2ban)
 PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script Osmaca ) 🍄${N}"
 echo -e "--------------------------------------------------------"
 echo -e " ${C}[1]${N} OpenSSH       $P22    ${C}[11]${N} PSIPHON SERVER ${R}[OFF]${N}"
@@ -354,7 +479,7 @@ echo -e " ${C}[4]${N} SSL/TLS       $PSSL    ${C}[14]${N} SLOWDNS        ${R}[OF
 echo -e " ${C}[5]${N} SHADOWSOCKS-R ${R}[OFF]${N}    ${C}[15]${N} SSL->PYTHON    ${R}[OFF]${N}"
 echo -e " ${C}[6]${N} SQUID         ${R}[OFF]${N}    ${C}[16]${N} SSLH MULTIPLEX ${R}[OFF]${N}"
 echo -e " ${C}[7]${N} PROXY PYTHON  $PPY    ${C}[17]${N} OVER WEBSOCKET ${A}(#BETA)${N}"
-echo -e " ${C}[8]${N} V2RAY MANAGER ${R}[OFF]${N}    ${C}[18]${N} SOCKS5         ${A}(#BETA)${N}"
+echo -e " ${C}[8]${N} V2RAY MANAGER $PV2    ${C}[18]${N} SOCKS5         ${A}(#BETA)${N}"
 echo -e " ${C}[9]${N} CFA ( CLASH ) ${R}[OFF]${N}    ${C}[19]${N} Protocolos UDP $PUDP"
 echo -e " ${C}[10]${N} TROJAN-GO     ${R}[OFF]${N}    ${C}[20]${N} ${C}FUNCIONES EN DISEÑO!${N}"
 echo -e " "
@@ -374,13 +499,14 @@ read -p " ► Opcion : " op_inst
 case $op_inst in
 4) menu_ssl ;;
 7) menu_py ;;
+8) menu_v2ray ;;
 19) menu_udp ;;
 21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo "Bloqueado"; read -p "Enter..." ;;
 22) menu_badvpn ;;
 24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo "Listo"; read -p "Enter..." ;;
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p "Enter..." ;;
 27) info_sistema; read -p "Enter..." ;;
-31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
+31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
 33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
 34) passwd root; read -p "Enter..." ;;
 0) break ;;
