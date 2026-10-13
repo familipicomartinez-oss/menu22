@@ -287,7 +287,7 @@ apt-get install -y badvpn >/dev/null 2>&1
 
 if [ -f /usr/bin/badvpn-udpgw ]; then
     chmod +x /usr/bin/badvpn-udpgw 2>/dev/null
-    echo -e "${V}Binario oficial instalado y purificado.${N}"
+    echo -e "${V}Binario oficial instalado.${N}"
     echo -e "\n${V}Configurando el arranque automatico...${N}"
     
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 10\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
@@ -505,7 +505,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER (BYPASS CDN GLOBAL) ---------
+# --------- MODULO HCR SERVER DEFINITIVO (FORZANDO IPv4) ---------
 menu_hcr() {
 while true; do
     clear
@@ -562,7 +562,7 @@ done
 
 instalar_hcr() {
     clear
-    echo -e "${A}========= INSTALACION SEGURA HCR SERVER =========${N}"
+    echo -e "${A}========= INSTALACION HCR SERVER =========${N}"
     mkdir -p /etc/hcr
     
     read -p " ► Puerto de Inyección [Default 8080]: " p_inj
@@ -588,26 +588,18 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Iniciando Bypass Nivel Dios (Descarga por CDN Global)...${N}"
+    echo -e "${C}Descargando binario (Forzando red IPv4 para evitar bloqueos)...${N}"
     rm -f /etc/hcr/hcr-server
     
-    apt-get install wget curl lsof coreutils -y >/dev/null 2>&1
+    apt-get install curl lsof coreutils -y >/dev/null 2>&1
     
-    # 1. CDN VIP: jsDelivr (Imposible de bloquear por GitHub, nos entrega el archivo original de Hiddify)
-    wget -qO /etc/hcr/hcr-server "https://cdn.jsdelivr.net/gh/hiddify/hiddify-config@main/hcr/hcr-server"
-    TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
+    # LA SOLUCION: Forzamos la descarga por IPv4 directa y segura (-4)
+    curl -4 -sL "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
     
-    # 2. Respaldo Nivel Dios: GHProxy directo al creador Chukkteam
-    if [ "$TAMANO" -lt 1000000 ]; then
-        echo -e "${A}Redirigiendo al servidor Proxy Secundario...${N}"
-        wget -qO /etc/hcr/hcr-server "https://ghproxy.net/https://github.com/chukkteam/hcr-server/releases/download/v1.0/hcr-server-linux-amd64"
-        TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
-    fi
-    
-    # 3. El escáner que te salvó la vida pesando el archivo
-    if [ "$TAMANO" -lt 1000000 ]; then
-        echo -e "\n${R}[!] ERROR FATAL DE RED [!]${N}"
-        echo -e "${A}Incluso las redes VIP globales fallaron al entregar el archivo a esta IP.${N}"
+    # Verificación real: ¿Es un archivo ejecutable Linux válido?
+    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
+        echo -e "\n${R}[!] ERROR DE DESCARGA [!]${N}"
+        echo -e "${A}La VPS sigue bloqueando la descarga. Tu máquina no tiene acceso a GitHub.${N}"
         rm -f /etc/hcr/hcr-server
         read -p " ► Enter para regresar..."
         return
@@ -632,7 +624,7 @@ probar() {
         wait $PID
         exit 0
     else
-        echo "-> Fallo real detectado." >> /etc/hcr/hcr.log
+        echo "-> Fallo de arranque." >> /etc/hcr/hcr.log
     fi
 }
 
@@ -649,8 +641,7 @@ else
 fi
 
 echo "=================================================" >> /etc/hcr/hcr.log
-echo "ERROR FATAL: Ninguna sintaxis funcionó." >> /etc/hcr/hcr.log
-sleep 15
+echo "ERROR FATAL: El binario no funcionó." >> /etc/hcr/hcr.log
 exit 1
 EOF
     chmod +x /etc/hcr/start.sh
@@ -667,9 +658,9 @@ EOF
     
     sleep 4
     if systemctl is-active --quiet hcr-server; then
-        echo -e "\n${V}¡Servidor HCR ORIGINAL Iniciado Exitosamente y Listo!${N}"
+        echo -e "\n${V}¡Servidor HCR Iniciado Exitosamente y Listo!${N}"
     else
-        echo -e "\n${R}El servidor no arrancó. Ve a la Opción 7 para ver el error exacto.${N}"
+        echo -e "\n${R}El servidor no arrancó. Ve a la Opción 7 para ver el log.${N}"
     fi
     read -p " ► Enter para continuar..."
 }
