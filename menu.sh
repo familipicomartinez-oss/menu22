@@ -386,7 +386,7 @@ case $op_v2 in
     UUID=$(uuidgen)
     
     echo -e "\n${A}Realizando escaneo a fondo y liberando el puerto $pt_v2...${N}"
-    systemctl stop proxypy stunnel4 apache2 nginx dropbear 2>/dev/null
+    systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
     fuser -k -9 $pt_v2/tcp >/dev/null 2>&1
     lsof -ti tcp:$pt_v2 | xargs kill -9 2>/dev/null
     sleep 2
@@ -462,7 +462,7 @@ EOF
     fi
     
     echo -e "\n${A}Liberando el nuevo puerto $pt_nuevo para evitar conflictos...${N}"
-    systemctl stop proxypy stunnel4 apache2 nginx dropbear 2>/dev/null
+    systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
     fuser -k -9 $pt_nuevo/tcp >/dev/null 2>&1
     lsof -ti tcp:$pt_nuevo | xargs kill -9 2>/dev/null
     
@@ -577,13 +577,16 @@ while true; do
         3)
             if [ "$MODO" == "Plain" ]; then
                 sed -i "s/MODO=.*/MODO=\"TLS\"/" /etc/hcr/config
+                sed -i "s/-tls=false/-tls=true/" /etc/systemd/system/hcr-server.service
                 if [ ! -f /etc/hcr/cert.pem ]; then
                     echo -e "${A}Generando certificado TLS...${N}"
                     openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
                 fi
             else
                 sed -i "s/MODO=.*/MODO=\"Plain\"/" /etc/hcr/config
+                sed -i "s/-tls=true/-tls=false/" /etc/systemd/system/hcr-server.service
             fi
+            systemctl daemon-reload
             echo -e "${V}Modo cambiado. Reiniciando HCR...${N}"; systemctl restart hcr-server; sleep 1
             ;;
         4)
@@ -600,7 +603,7 @@ while true; do
                 systemctl stop hcr-server
                 echo -e "${A}Servidor HCR Detenido.${N}"; sleep 1
             else
-                if [ ! -f /etc/hcr/hcr.py ]; then
+                if [ ! -f /etc/hcr/hcr-server ]; then
                     instalar_hcr
                 else
                     source /etc/hcr/config
@@ -630,7 +633,7 @@ done
 instalar_hcr() {
     clear
     echo -e "${A}========= INSTALACION DE HCR SERVER =========${N}"
-    echo -e "${C}Descargando y configurando binario de HCR...${N}"
+    echo -e "${C}Descargando binario oficial de HCR...${N}"
     mkdir -p /etc/hcr
     
     read -p " Puerto de Inyección [Default 8080]: " p_inj
@@ -647,88 +650,26 @@ instalar_hcr() {
     
     if [ "$op_m" == "2" ]; then
         MODO="TLS"
+        TLS_FLAG="true"
         echo -e "\n${A}Generando certificado TLS...${N}"
         apt-get install openssl -y >/dev/null 2>&1
         openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
     else
         MODO="Plain"
+        TLS_FLAG="false"
     fi
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"\nMAX_FILE=\"16384\"" > /etc/hcr/config
 
-    cat << 'EOF' > /etc/hcr/hcr.py
-import socket, threading, ssl
-
-def load_config():
-    cfg = {"P_INJ": 8080, "P_DEST": 22, "MODO": "Plain"}
-    try:
-        with open("/etc/hcr/config", "r") as f:
-            for line in f:
-                if "=" in line:
-                    k, v = line.strip().split("=")
-                    cfg[k] = v.replace('"', '')
-    except: pass
-    return int(cfg["P_INJ"]), int(cfg["P_DEST"]), cfg["MODO"]
-
-PORT_IN, PORT_OUT, MODE = load_config()
-
-def handle_client(client_socket):
-    try:
-        data = client_socket.recv(8192)
-        if not data: return
-        
-        client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-        
-        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        remote_socket.connect(('127.0.0.1', PORT_OUT))
-        
-        def forward(src, dst):
-            try:
-                while True:
-                    d = src.recv(16384)
-                    if not d: break
-                    dst.sendall(d)
-            except: pass
-            finally:
-                try: src.close()
-                except: pass
-                try: dst.close()
-                except: pass
-
-        threading.Thread(target=forward, args=(client_socket, remote_socket), daemon=True).start()
-        threading.Thread(target=forward, args=(remote_socket, client_socket), daemon=True).start()
-    except:
-        try: client_socket.close()
-        except: pass
-
-def start_server():
-    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    server.bind(('0.0.0.0', PORT_IN))
-    server.listen(1000)
-
-    if MODE == "TLS":
-        try:
-            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
-            context.load_cert_chain('/etc/hcr/cert.pem', '/etc/hcr/key.pem')
-            server = context.wrap_socket(server, server_side=True)
-        except Exception as e:
-            print("Error TLS:", e)
-
-    print(f"HCR Server iniciado en puerto {PORT_IN} -> {PORT_OUT} [{MODE}]")
-    while True:
-        try:
-            client, addr = server.accept()
-            threading.Thread(target=handle_client, args=(client,), daemon=True).start()
-        except: pass
-
-if __name__ == "__main__":
-    start_server()
-EOF
-
-    apt-get install python3 lsof -y >/dev/null 2>&1
+    wget -qO /etc/hcr/hcr-server "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
+    if [ ! -f /etc/hcr/hcr-server ]; then
+         wget -qO /etc/hcr/hcr-server "https://github.com/chukkteam/hcr-server/releases/download/v1.0/hcr-server-linux-amd64"
+    fi
     
-    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/usr/bin/python3 /etc/hcr/hcr.py\nRestart=always\nLimitNOFILE=16384\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
+    chmod +x /etc/hcr/hcr-server
+    apt-get install lsof -y >/dev/null 2>&1
+    
+    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/hcr-server -listen=:$p_inj -target=127.0.0.1:$p_dest -tls=$TLS_FLAG -cert=/etc/hcr/cert.pem -key=/etc/hcr/key.pem\nRestart=always\nLimitNOFILE=16384\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
     
     fuser -k -9 $p_inj/tcp >/dev/null 2>&1
     lsof -ti tcp:$p_inj | xargs kill -9 2>/dev/null
