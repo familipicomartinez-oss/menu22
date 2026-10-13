@@ -30,6 +30,10 @@ ss -ulnp | grep -q ":36712" && agregar_puerto "🔹 UDP: ${V}36712${N}"
 ss -tlnp | grep -q ":53 " && agregar_puerto "🔹 DNS: ${V}53${N}"
 ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
 ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
+if [ -f /etc/hcr/config ]; then
+    source /etc/hcr/config
+    ss -tlnp | grep -q ":$P_INJ " && agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
+fi
 [ -z "$STR_PORTS" ] && STR_PORTS="🔹 ${R}Sin puertos abiertos actualmente${N}"
 echo -e "${C}=========>>>>> 🌿 Script Osmaca 🌿 <<<<<=========${N}"
 echo -e "${V}$IP_VPS${N}"
@@ -515,12 +519,226 @@ EOF
 esac
 done
 }
+
+# --------- NUEVO MODULO HCR SERVER (OPCION 37) ---------
+menu_hcr() {
+while true; do
+    clear
+    ESTADO=$(systemctl is-active --quiet hcr-server && echo -e "${V}Activo${N}" || echo -e "${R}Inactivo${N}")
+    
+    if [ -f /etc/hcr/config ]; then
+        source /etc/hcr/config
+    else
+        P_INJ="8080"
+        P_DEST="22"
+        MODO="Plain"
+        MAX_FILE="16384"
+    fi
+
+    echo -e "${C}================================================${N}"
+    echo -e "       MENU HCR SERVER - Estado: $ESTADO"
+    echo -e "${C}================================================${N}"
+    echo -e " ${V}[1]${N} ⚙️ Puerto Inyección [$P_INJ]  ${V}[2]${N} ⚙️ Puerto Destino   [$P_DEST]"
+    echo -e " ${V}[3]${N} 🛡️ Modo             [$MODO]  ${V}[4]${N} 📦 Max On File      [$MAX_FILE]"
+    echo -e " ${A}[5]${N} 🟢 Iniciar/Detener           ${R}[6]${N} 🗑️ Desinstalar HCR"
+    echo -e " ${C}[7]${N} 👁️ Ver Logs (Real-time)"
+    echo -e " ${C}[0]${N} ↩️ REGRESAR"
+    echo -e "${C}================================================${N}"
+    read -p " ► Opcion : " op_hcr
+    
+    case $op_hcr in
+        1)
+            read -p " Nuevo Puerto Inyección: " nuevo_inj
+            if [ -n "$nuevo_inj" ]; then
+                sed -i "s/P_INJ=.*/P_INJ=\"$nuevo_inj\"/" /etc/hcr/config
+                systemctl restart hcr-server
+                echo -e "${V}Puerto Inyección actualizado a $nuevo_inj.${N}"; sleep 1
+            fi
+            ;;
+        2)
+            read -p " Nuevo Puerto Destino: " nuevo_dest
+            if [ -n "$nuevo_dest" ]; then
+                sed -i "s/P_DEST=.*/P_DEST=\"$nuevo_dest\"/" /etc/hcr/config
+                systemctl restart hcr-server
+                echo -e "${V}Puerto Destino actualizado a $nuevo_dest.${N}"; sleep 1
+            fi
+            ;;
+        3)
+            if [ "$MODO" == "Plain" ]; then
+                sed -i "s/MODO=.*/MODO=\"TLS\"/" /etc/hcr/config
+                if [ ! -f /etc/hcr/cert.pem ]; then
+                    echo -e "${A}Generando certificado TLS...${N}"
+                    openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
+                fi
+            else
+                sed -i "s/MODO=.*/MODO=\"Plain\"/" /etc/hcr/config
+            fi
+            echo -e "${V}Modo cambiado. Reiniciando HCR...${N}"; systemctl restart hcr-server; sleep 1
+            ;;
+        4)
+            read -p " Nuevo Max On File: " nuevo_max
+            if [ -n "$nuevo_max" ]; then
+                sed -i "s/MAX_FILE=.*/MAX_FILE=\"$nuevo_max\"/" /etc/hcr/config
+                sed -i "s/LimitNOFILE=.*/LimitNOFILE=$nuevo_max/" /etc/systemd/system/hcr-server.service
+                systemctl daemon-reload; systemctl restart hcr-server
+                echo -e "${V}Límite actualizado.${N}"; sleep 1
+            fi
+            ;;
+        5)
+            if systemctl is-active --quiet hcr-server; then
+                systemctl stop hcr-server
+                echo -e "${A}Servidor HCR Detenido.${N}"; sleep 1
+            else
+                if [ ! -f /etc/hcr/hcr.py ]; then
+                    instalar_hcr
+                else
+                    source /etc/hcr/config
+                    fuser -k -9 $P_INJ/tcp >/dev/null 2>&1
+                    lsof -ti tcp:$P_INJ | xargs kill -9 2>/dev/null
+                    systemctl restart hcr-server
+                    echo -e "${V}Servidor HCR Iniciado.${N}"; sleep 1
+                fi
+            fi
+            ;;
+        6)
+            systemctl stop hcr-server 2>/dev/null
+            systemctl disable hcr-server 2>/dev/null
+            rm -rf /etc/hcr /etc/systemd/system/hcr-server.service
+            systemctl daemon-reload
+            echo -e "${R}HCR Desinstalado.${N}"; sleep 1
+            ;;
+        7)
+            echo -e "${A}Presiona CTRL+C para salir de los logs${N}"
+            journalctl -u hcr-server -f
+            ;;
+        0) break ;;
+    esac
+done
+}
+
+instalar_hcr() {
+    clear
+    echo -e "${A}========= INSTALACION DE HCR SERVER =========${N}"
+    echo -e "${C}Descargando y configurando binario de HCR...${N}"
+    mkdir -p /etc/hcr
+    
+    read -p " Puerto de Inyección [Default 8080]: " p_inj
+    p_inj=${p_inj:-8080}
+    
+    read -p " Puerto de redireccionamiento [Default 22]: " p_dest
+    p_dest=${p_dest:-22}
+    
+    echo -e "\n Modo de transporte:"
+    echo -e " [1] Plain (Recomendado)"
+    echo -e " [2] TLS (Generará certificado)"
+    read -p " Seleccione opción [Default 1]: " op_m
+    op_m=${op_m:-1}
+    
+    if [ "$op_m" == "2" ]; then
+        MODO="TLS"
+        echo -e "\n${A}Generando certificado TLS...${N}"
+        apt-get install openssl -y >/dev/null 2>&1
+        openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
+    else
+        MODO="Plain"
+    fi
+    
+    echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"\nMAX_FILE=\"16384\"" > /etc/hcr/config
+
+    cat << 'EOF' > /etc/hcr/hcr.py
+import socket, threading, ssl
+
+def load_config():
+    cfg = {"P_INJ": 8080, "P_DEST": 22, "MODO": "Plain"}
+    try:
+        with open("/etc/hcr/config", "r") as f:
+            for line in f:
+                if "=" in line:
+                    k, v = line.strip().split("=")
+                    cfg[k] = v.replace('"', '')
+    except: pass
+    return int(cfg["P_INJ"]), int(cfg["P_DEST"]), cfg["MODO"]
+
+PORT_IN, PORT_OUT, MODE = load_config()
+
+def handle_client(client_socket):
+    try:
+        data = client_socket.recv(8192)
+        if not data: return
+        
+        client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        
+        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        remote_socket.connect(('127.0.0.1', PORT_OUT))
+        
+        def forward(src, dst):
+            try:
+                while True:
+                    d = src.recv(16384)
+                    if not d: break
+                    dst.sendall(d)
+            except: pass
+            finally:
+                try: src.close()
+                except: pass
+                try: dst.close()
+                except: pass
+
+        threading.Thread(target=forward, args=(client_socket, remote_socket), daemon=True).start()
+        threading.Thread(target=forward, args=(remote_socket, client_socket), daemon=True).start()
+    except:
+        try: client_socket.close()
+        except: pass
+
+def start_server():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(('0.0.0.0', PORT_IN))
+    server.listen(1000)
+
+    if MODE == "TLS":
+        try:
+            context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+            context.load_cert_chain('/etc/hcr/cert.pem', '/etc/hcr/key.pem')
+            server = context.wrap_socket(server, server_side=True)
+        except Exception as e:
+            print("Error TLS:", e)
+
+    print(f"HCR Server iniciado en puerto {PORT_IN} -> {PORT_OUT} [{MODE}]")
+    while True:
+        try:
+            client, addr = server.accept()
+            threading.Thread(target=handle_client, args=(client,), daemon=True).start()
+        except: pass
+
+if __name__ == "__main__":
+    start_server()
+EOF
+
+    apt-get install python3 lsof -y >/dev/null 2>&1
+    
+    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/usr/bin/python3 /etc/hcr/hcr.py\nRestart=always\nLimitNOFILE=16384\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
+    
+    fuser -k -9 $p_inj/tcp >/dev/null 2>&1
+    lsof -ti tcp:$p_inj | xargs kill -9 2>/dev/null
+    
+    systemctl daemon-reload
+    systemctl enable hcr-server >/dev/null 2>&1
+    systemctl start hcr-server
+    ufw allow $p_inj/tcp >/dev/null 2>&1
+    
+    echo -e "\n${V}Instalación completada exitosamente.${N}"
+    sleep 2
+}
+# --------- FIN MODULO HCR SERVER ---------
+
 menu_protocolos() {
 while true; do
 clear
 P22=$(ep 22); P80=$(es proxypy); PSSL=$(es stunnel4); PPY=$(es proxypy); PUDP=$(es udp-custom); PFB=$(es fail2ban)
 PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+PHCR=$(es hcr-server)
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script Osmaca ) 🍄${N}"
 echo -e "--------------------------------------------------------"
 echo -e " ${C}[1]${N} OpenSSH       $P22    ${C}[11]${N} PSIPHON SERVER ${R}[OFF]${N}"
@@ -544,7 +762,7 @@ echo -e " ${C}[29]${N} DNS CUSTOM (NETFLIX) ${C}[30]${N} HERRAMIENTAS EXTRAS"
 echo -e " ${C}[31]${N} REINICIAR SERVICIOS  ${C}[32]${N} Brook Server   ${R}[OFF]${N}"
 echo -e " ${C}[33]${N} FIREWALL (IPTABLES)  ${C}[34]${N} Enable/Change PASSWD ROOT"
 echo -e " ${C}[35]${N} AToken [APP's] ${R}[OFF]${N} ${C}[36]${N} BHTTP [APP's]  ${R}[OFF]${N}"
-echo -e " ${C}[37]${N} HCR [HTTP C.]  ${R}[OFF]${N} ${C}[0]${N}  ${R}[ REGRESAR ]${N}"
+echo -e " ${C}[37]${N} HCR [HTTP C.]  $PHCR ${C}[0]${N}  ${R}[ REGRESAR ]${N}"
 echo -e "--------------------------------------------------------"
 read -p " ► Opcion : " op_inst
 case $op_inst in
@@ -557,9 +775,10 @@ case $op_inst in
 24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo "Listo"; read -p "Enter..." ;;
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p "Enter..." ;;
 27) info_sistema; read -p "Enter..." ;;
-31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
-33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
+31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
+33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
 34) passwd root; read -p "Enter..." ;;
+37) menu_hcr ;;
 0) break ;;
 *) echo -e "${R}Inválido${N}"; sleep 1 ;;
 esac
@@ -579,7 +798,7 @@ echo -e "${A}──────────────────────�
 read -p " ► Opcion : " opcion
 case $opcion in
 1) menu_usuarios ;;
-2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.${N}"; read -p "Enter..." ;;
+2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.${N}"; read -p "Enter..." ;;
 3|4|5|6) menu_protocolos ;;
 0) exit 0 ;;
 esac
