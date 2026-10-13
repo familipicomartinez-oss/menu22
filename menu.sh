@@ -241,7 +241,7 @@ echo -e "----------------------------------------"
 read -p " ► Opcion : " op_udp
 case $op_udp in
 1)
-echo "Instalando servidor UDP Custom (Fuente Oficial Haris131)..."
+echo "Instalando servidor UDP Custom (Fuente Oficial)..."
 apt-get install -y iptables wget >/dev/null 2>&1
 wget -q "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -O /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
@@ -505,7 +505,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER ORIGINAL PURO (OPCION 37) ---------
+# --------- MODULO HCR SERVER DEFINITIVO CON DIAGNÓSTICO (OPCION 37) ---------
 menu_hcr() {
 while true; do
     clear
@@ -549,11 +549,11 @@ while true; do
             clear
             echo -e "${A}=== LOGS DE ERROR DEL HCR (CTRL+C para salir) ===${N}"
             if [ -f /etc/hcr/hcr.log ]; then
-                tail -f /etc/hcr/hcr.log
+                tail -n 30 -f /etc/hcr/hcr.log
             else
                 echo -e "${R}El archivo de log aún no existe.${N}"
+                read -p "Enter..."
             fi
-            read -p "Enter..."
             ;;
         0) break ;;
     esac
@@ -591,39 +591,57 @@ instalar_hcr() {
     echo -e "${C}Descargando binario ORIGINAL desde repositorios globales seguros...${N}"
     rm -f /etc/hcr/hcr-server
     
-    # CONEXIÓN A LA FUENTE ORIGINAL DE GITHUB (Ni Rufu ni Chumo, directo del desarrollador base)
-    wget -qO /etc/hcr/hcr-server "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
+    # CONEXIÓN DIRECTA Y SEGURA A LA MATRIZ: HIDDIFY
+    wget -q -L -O /etc/hcr/hcr-server "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
     TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
     
-    # Si falla, vamos al creador original Chukkteam
+    # RESPALDO: CREADOR ORIGINAL CHUKKTEAM (Solo se activa si el primero pesa menos de 1 MB, indicando enlace caido)
     if [ "$TAMANO" -lt 1000000 ]; then
-        echo -e "${A}Espejo Hiddify falló. Intentando con creador original Chukkteam...${N}"
-        wget -qO /etc/hcr/hcr-server "https://github.com/chukkteam/hcr-server/releases/download/v1.0/hcr-server-linux-amd64"
+        echo -e "${A}Espejo Hiddify no respondio. Intentando con creador original Chukkteam...${N}"
+        wget -q -L -O /etc/hcr/hcr-server "https://github.com/chukkteam/hcr-server/releases/download/v1.0/hcr-server-linux-amd64"
     fi
     
     chmod +x /etc/hcr/hcr-server
     apt-get install lsof coreutils -y >/dev/null 2>&1
     
+    # AQUI ESTA LA MAGIA: El lanzador inteligente de Fuerza Bruta que lee el error real y no trunca el log
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
-echo "=== LOGS DE ARRANQUE HCR ===" > /etc/hcr/hcr.log
-echo "Configuracion -> IN: $P_INJ | DEST: $P_DEST | MODO: $MODO" >> /etc/hcr/hcr.log
+echo "=================================================" >> /etc/hcr/hcr.log
+echo "NUEVO INTENTO: IN: $P_INJ | DEST: $P_DEST | MODO: $MODO" >> /etc/hcr/hcr.log
+
+probar() {
+    comando="$@"
+    echo "-> Probando comando: $comando" >> /etc/hcr/hcr.log
+    $comando >> /etc/hcr/hcr.log 2>&1 &
+    PID=$!
+    sleep 3
+    if ps -p $PID > /dev/null; then
+        echo "¡ÉXITO! Servidor estable con PID $PID" >> /etc/hcr/hcr.log
+        wait $PID
+        exit 0
+    else
+        echo "-> Fallo. Revisa arriba el error que arrojó el binario." >> /etc/hcr/hcr.log
+    fi
+}
 
 if [ "$MODO" == "TLS" ]; then
-    /etc/hcr/hcr-server -listen :$P_INJ -tls >> /etc/hcr/hcr.log 2>&1 &
-    PID=$!
+    probar /etc/hcr/hcr-server -listen :$P_INJ -tls
+    probar /etc/hcr/hcr-server -port $P_INJ -tls
+    probar /etc/hcr/hcr-server -l :$P_INJ -tls
 else
-    /etc/hcr/hcr-server -port $P_INJ >> /etc/hcr/hcr.log 2>&1 &
-    PID=$!
-    sleep 2
-    if ! ps -p $PID > /dev/null; then
-        echo "Intento 1 fallo. Arrancando metodo original..." >> /etc/hcr/hcr.log
-        /etc/hcr/hcr-server -listen :$P_INJ >> /etc/hcr/hcr.log 2>&1 &
-        PID=$!
-    fi
+    probar /etc/hcr/hcr-server -listen :$P_INJ
+    probar /etc/hcr/hcr-server -port $P_INJ
+    probar /etc/hcr/hcr-server -l :$P_INJ
+    probar /etc/hcr/hcr-server --port $P_INJ
+    probar /etc/hcr/hcr-server
 fi
-wait $PID
+
+echo "=================================================" >> /etc/hcr/hcr.log
+echo "ERROR FATAL: Ninguna sintaxis funcionó. Revisa el log de arriba." >> /etc/hcr/hcr.log
+sleep 15
+exit 1
 EOF
     chmod +x /etc/hcr/start.sh
 
@@ -637,11 +655,11 @@ EOF
     systemctl start hcr-server
     ufw allow $p_inj/tcp >/dev/null 2>&1
     
-    sleep 2
+    sleep 4
     if systemctl is-active --quiet hcr-server; then
         echo -e "\n${V}¡Servidor HCR ORIGINAL Iniciado Exitosamente y Listo!${N}"
     else
-        echo -e "\n${R}El servidor no arrancó. Ve a la Opción 7 para ver el error real.${N}"
+        echo -e "\n${R}El servidor no arrancó. Ve a la Opción 7 para ver el error exacto.${N}"
     fi
     read -p " ► Enter para continuar..."
 }
