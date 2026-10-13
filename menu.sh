@@ -247,7 +247,7 @@ echo -e "----------------------------------------"
 read -p " ► Opcion : " op_udp
 case $op_udp in
 1)
-echo "Instalando servidor UDP Custom (Fuente Oficial)..."
+echo "Instalando servidor UDP Custom..."
 apt-get install -y iptables curl >/dev/null 2>&1
 curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
@@ -355,7 +355,7 @@ read -p " ► Opcion : " op_v2
 case $op_v2 in
 1)
     clear
-    echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY OFICIAL) ===${N}"
+    echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY) ===${N}"
     apt-get update -y >/dev/null 2>&1
     apt-get install -y jq uuid-runtime curl psmisc lsof openssl >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
@@ -511,7 +511,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER CON CAZADOR MULTI-ESPEJO ---------
+# --------- MODULO HCR SERVER DEFINITIVO ---------
 menu_hcr() {
 while true; do
     clear
@@ -593,33 +593,22 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Iniciando Cazador Multi-Espejo...${N}"
+    echo -e "${C}Descargando binario...${N}"
     rm -f /etc/hcr/hcr-server
     apt-get install curl lsof coreutils -y >/dev/null 2>&1
     
-    # LISTA DE RESPALDOS: Si el 1ero da 404, prueba el 2do, luego el 3ro...
-    MIRRORS=(
-        "https://raw.githubusercontent.com/ChumoGH/ScriptCGH/main/modulos/hcr-server"
-        "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
-        "https://raw.githubusercontent.com/VPS-Freenet/VPS-Freenet/main/Plugins/hcr"
-        "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Plugins/hcr-server"
-    )
+    # URL directa de la versión de 64 bits para Linux
+    curl -4 -sL "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server" -o /etc/hcr/hcr-server
     
-    DESCARGA_EXITOSA=0
-    for url in "${MIRRORS[@]}"; do
-        echo -e "► Probando descarga..."
-        curl -4 -sL "$url" -o /etc/hcr/hcr-server
-        # VERIFICADOR DE SEGURIDAD RECUPERADO: Pesa el archivo y verifica si es un programa real (no un 404)
-        if head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
-            echo -e "${V}¡Archivo limpio y funcional encontrado!${N}"
-            DESCARGA_EXITOSA=1
-            break
-        fi
-    done
-    
-    if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
+    # Comprobar si se descargó correctamente
+    if ! grep -q "ELF" /etc/hcr/hcr-server; then
+        echo -e "${A}Intentando desde repositorio secundario...${N}"
+        curl -4 -sL "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
+    fi
+
+    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
         echo -e "\n${R}[!] ERROR CRÍTICO [!]${N}"
-        echo -e "${A}Ningún servidor en el mundo respondió correctamente.${N}"
+        echo -e "${A}No se pudo descargar el archivo ejecutable. Verifica la conexión de la VPS.${N}"
         rm -f /etc/hcr/hcr-server
         read -p " ► Enter para regresar..."
         return
@@ -633,9 +622,9 @@ source /etc/hcr/config
 cd /etc/hcr
 
 if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -port $P_INJ -tls || ./hcr-server server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls
+    ./hcr-server -listen :$P_INJ -tls &
 else
-    ./hcr-server -port $P_INJ || ./hcr-server server -port $P_INJ || ./hcr-server -listen :$P_INJ
+    ./hcr-server -listen :$P_INJ &
 fi
 EOF
     chmod +x /etc/hcr/start.sh
