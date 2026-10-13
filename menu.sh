@@ -505,7 +505,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER DEFINITIVO CON DIAGNÓSTICO (OPCION 37) ---------
+# --------- MODULO HCR SERVER ACTUALIZADO ---------
 menu_hcr() {
 while true; do
     clear
@@ -588,23 +588,25 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Descargando binario ORIGINAL desde repositorios globales seguros...${N}"
+    echo -e "${C}Descargando binario ORIGINAL limpio...${N}"
     rm -f /etc/hcr/hcr-server
     
-    # CONEXIÓN DIRECTA Y SEGURA A LA MATRIZ: HIDDIFY
-    wget -q -L -O /etc/hcr/hcr-server "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
-    TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
+    # Descarga desde un repositorio limpio que SÍ sirve el binario real
+    wget -qO /etc/hcr/hcr-server "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
     
-    # RESPALDO: CREADOR ORIGINAL CHUKKTEAM (Solo se activa si el primero pesa menos de 1 MB, indicando enlace caido)
-    if [ "$TAMANO" -lt 1000000 ]; then
-        echo -e "${A}Espejo Hiddify no respondio. Intentando con creador original Chukkteam...${N}"
-        wget -q -L -O /etc/hcr/hcr-server "https://github.com/chukkteam/hcr-server/releases/download/v1.0/hcr-server-linux-amd64"
+    # SISTEMA DE SEGURIDAD: Verificar si el archivo es un programa real (Formato ELF)
+    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
+        echo -e "\n${R}[!] ALERTA CRITICA DE SEGURIDAD [!]${N}"
+        echo -e "${A}El servidor devolvio un archivo corrupto o bloqueado por red.${N}"
+        echo -e "${A}La instalacion ha sido abortada para proteger tu VPS.${N}"
+        rm -f /etc/hcr/hcr-server
+        read -p " ► Enter para regresar..."
+        return
     fi
     
     chmod +x /etc/hcr/hcr-server
     apt-get install lsof coreutils -y >/dev/null 2>&1
     
-    # AQUI ESTA LA MAGIA: El lanzador inteligente de Fuerza Bruta que lee el error real y no trunca el log
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
@@ -622,7 +624,7 @@ probar() {
         wait $PID
         exit 0
     else
-        echo "-> Fallo. Revisa arriba el error que arrojó el binario." >> /etc/hcr/hcr.log
+        echo "-> Fallo real detectado." >> /etc/hcr/hcr.log
     fi
 }
 
@@ -639,7 +641,7 @@ else
 fi
 
 echo "=================================================" >> /etc/hcr/hcr.log
-echo "ERROR FATAL: Ninguna sintaxis funcionó. Revisa el log de arriba." >> /etc/hcr/hcr.log
+echo "ERROR FATAL: Ninguna sintaxis funcionó." >> /etc/hcr/hcr.log
 sleep 15
 exit 1
 EOF
