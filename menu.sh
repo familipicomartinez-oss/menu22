@@ -505,7 +505,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER 100% LIMPIO (SIN FILTROS RAROS) ---------
+# --------- MODULO HCR SERVER DEFINITIVO (PERMISOS FORZADOS) ---------
 menu_hcr() {
 while true; do
     clear
@@ -588,19 +588,16 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Descargando binario y pasando directo a la instalacion...${N}"
+    echo -e "${C}Descargando binario directamente...${N}"
     rm -f /etc/hcr/hcr-server
     
     apt-get install curl lsof coreutils -y >/dev/null 2>&1
     
-    # URL Secreta directa a un archivo 100% vivo y puro, sin pasar por filtros tuyos
     URL_SECRETA=$(echo "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3J1ZGk5OTk5L0FETVJ1ZnUvbWFpbi9QbHVnaW5zL2hjcg==" | base64 -d)
-    
-    # Descargamos
     curl -4 -sL "$URL_SECRETA" -o /etc/hcr/hcr-server
     
-    # Le damos permiso de ejecución de inmediato, sin paranoias ni escaneos
-    chmod +x /etc/hcr/hcr-server
+    # LA CLAVE DE ORO: Forzar lectura, escritura y ejecución al máximo nivel (777)
+    chmod 777 /etc/hcr/hcr-server
     
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
@@ -650,6 +647,9 @@ EOF
     systemctl daemon-reload
     systemctl enable hcr-server >/dev/null 2>&1
     systemctl start hcr-server
+    
+    # FORZAR LA APERTURA FÍSICA DEL PUERTO EN EL FIREWALL DE LINUX (IPTABLES + UFW)
+    iptables -I INPUT -p tcp --dport $p_inj -j ACCEPT >/dev/null 2>&1
     ufw allow $p_inj/tcp >/dev/null 2>&1
     
     sleep 4
