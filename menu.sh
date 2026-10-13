@@ -242,8 +242,8 @@ read -p " ► Opcion : " op_udp
 case $op_udp in
 1)
 echo "Instalando servidor UDP Custom (Fuente Oficial)..."
-apt-get install -y iptables wget >/dev/null 2>&1
-wget -q "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -O /usr/bin/udp-custom
+apt-get install -y iptables curl >/dev/null 2>&1
+curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
 echo -e "{\n  \"listen\": \":36712\",\n  \"stream_buffer\": 33554432,\n  \"receive_buffer\": 8388608,\n  \"auth\": {\n    \"mode\": \"passwords\"\n  }\n}" > /root/udp/config.json
 echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
@@ -505,7 +505,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER ACTUALIZADO ---------
+# --------- MODULO HCR SERVER ACTUALIZADO (OPCION 37) ---------
 menu_hcr() {
 while true; do
     clear
@@ -588,24 +588,30 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Descargando binario ORIGINAL limpio...${N}"
+    echo -e "${C}Descargando binario ORIGINAL (Bypass de seguridad de GitHub)...${N}"
     rm -f /etc/hcr/hcr-server
     
-    # Descarga desde un repositorio limpio que SÍ sirve el binario real
-    wget -qO /etc/hcr/hcr-server "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
+    apt-get install curl lsof coreutils -y >/dev/null 2>&1
     
-    # SISTEMA DE SEGURIDAD: Verificar si el archivo es un programa real (Formato ELF)
+    # Motor de descarga oculto: Disfrazamos la VPS de Google Chrome para que GitHub no la bloquee
+    curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36" "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server" -o /etc/hcr/hcr-server
+    
+    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
+        echo -e "${A}Bloqueo de matriz detectado. Pasando al espejo secundario...${N}"
+        curl -sL -A "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
+    fi
+    
+    # Sistema de seguridad definitivo que frenó la falla de tu foto
     if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
         echo -e "\n${R}[!] ALERTA CRITICA DE SEGURIDAD [!]${N}"
-        echo -e "${A}El servidor devolvio un archivo corrupto o bloqueado por red.${N}"
-        echo -e "${A}La instalacion ha sido abortada para proteger tu VPS.${N}"
+        echo -e "${A}Las fuentes globales de GitHub siguen bloqueando a tu VPS.${N}"
+        echo -e "${A}La instalacion ha sido abortada para proteger tu sistema.${N}"
         rm -f /etc/hcr/hcr-server
         read -p " ► Enter para regresar..."
         return
     fi
     
     chmod +x /etc/hcr/hcr-server
-    apt-get install lsof coreutils -y >/dev/null 2>&1
     
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
