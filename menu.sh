@@ -37,10 +37,17 @@ ss -ulnp | grep -q ":36712" && agregar_puerto "🔹 UDP: ${V}36712${N}"
 ss -tlnp | grep -q ":53 " && agregar_puerto "🔹 DNS: ${V}53${N}"
 ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
 ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
+
 if [ -f /etc/hcr/config ]; then
     source /etc/hcr/config
-    ss -tlnp | grep -q ":$P_INJ " && agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
+    # Escáner estricto: Si el puerto está abierto, sale verde. Si no, sale ROJO CERRADO.
+    if ss -tlnp | grep -qw "$P_INJ"; then
+        agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
+    else
+        agregar_puerto "🔹 HCR: ${R}CERRADO ($P_INJ)${N}"
+    fi
 fi
+
 [ -z "$STR_PORTS" ] && STR_PORTS="🔹 ${R}Sin puertos abiertos actualmente${N}"
 echo -e "${C}=========>>>>> 🌿 Script Osmaca 🌿 <<<<<=========${N}"
 echo -e "${V}$IP_VPS${N}"
@@ -505,7 +512,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER DEFINITIVO (PERMISOS FORZADOS) ---------
+# --------- MODULO HCR SERVER 100% PROFESIONAL ---------
 menu_hcr() {
 while true; do
     clear
@@ -525,7 +532,7 @@ while true; do
     echo -e " ${V}[1]${N} ⚙️ Puerto Inyección [$P_INJ]  ${V}[2]${N} ⚙️ Puerto Destino [$P_DEST]"
     echo -e " ${V}[3]${N} 🛡️ Modo             [$MODO] "
     echo -e " ${A}[5]${N} 🟢 Iniciar / Configurar      ${R}[6]${N} 🗑️ Desinstalar HCR"
-    echo -e " ${C}[7]${N} 👁️ Ver Errores del Servidor (Log)"
+    echo -e " ${C}[7]${N} 👁️ Ver Errores del Servidor (Log Real de Linux)"
     echo -e " ${C}[0]${N} ↩️ REGRESAR"
     echo -e "${C}================================================${N}"
     read -p " ► Opcion : " op_hcr
@@ -547,13 +554,12 @@ while true; do
             ;;
         7)
             clear
-            echo -e "${A}=== LOGS DE ERROR DEL HCR (CTRL+C para salir) ===${N}"
-            if [ -f /etc/hcr/hcr.log ]; then
-                tail -n 30 -f /etc/hcr/hcr.log
-            else
-                echo -e "${R}El archivo de log aún no existe.${N}"
-                read -p "Enter..."
-            fi
+            echo -e "${A}=== LOGS DEL MOTOR HCR (Muestra errores reales) ===${N}"
+            echo -e "${C}Mostrando las últimas lineas del motor. Lee atentamente:${N}"
+            echo "---------------------------------------------------------"
+            journalctl -u hcr-server -n 40 --no-pager
+            echo "---------------------------------------------------------"
+            read -p " ► Enter para regresar..."
             ;;
         0) break ;;
     esac
@@ -562,7 +568,7 @@ done
 
 instalar_hcr() {
     clear
-    echo -e "${A}========= INSTALACION HCR SERVER =========${N}"
+    echo -e "${A}========= INSTALACION DIRECTA HCR SERVER =========${N}"
     mkdir -p /etc/hcr
     
     read -p " ► Puerto de Inyección [Default 8080]: " p_inj
@@ -595,51 +601,23 @@ instalar_hcr() {
     
     URL_SECRETA=$(echo "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3J1ZGk5OTk5L0FETVJ1ZnUvbWFpbi9QbHVnaW5zL2hjcg==" | base64 -d)
     curl -4 -sL "$URL_SECRETA" -o /etc/hcr/hcr-server
-    
-    # LA CLAVE DE ORO: Forzar lectura, escritura y ejecución al máximo nivel (777)
     chmod 777 /etc/hcr/hcr-server
     
+    # NUEVO ARRANQUE DE FRENTE: Cero falsos positivos en segundo plano
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
-echo "=================================================" >> /etc/hcr/hcr.log
-echo "NUEVO INTENTO: IN: $P_INJ | DEST: $P_DEST | MODO: $MODO" >> /etc/hcr/hcr.log
-
-probar() {
-    comando="$@"
-    echo "-> Probando comando: $comando" >> /etc/hcr/hcr.log
-    $comando >> /etc/hcr/hcr.log 2>&1 &
-    PID=$!
-    sleep 3
-    if ps -p $PID > /dev/null; then
-        echo "¡ÉXITO! Servidor estable con PID $PID" >> /etc/hcr/hcr.log
-        wait $PID
-        exit 0
-    else
-        echo "-> Fallo de arranque." >> /etc/hcr/hcr.log
-    fi
-}
+cd /etc/hcr
 
 if [ "$MODO" == "TLS" ]; then
-    probar /etc/hcr/hcr-server -listen :$P_INJ -tls
-    probar /etc/hcr/hcr-server -port $P_INJ -tls
-    probar /etc/hcr/hcr-server -l :$P_INJ -tls
-    probar /etc/hcr/hcr-server -p $P_INJ -tls
+    ./hcr-server -port $P_INJ -tls || ./hcr-server server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls || ./hcr-server -p $P_INJ -tls
 else
-    probar /etc/hcr/hcr-server -listen :$P_INJ
-    probar /etc/hcr/hcr-server -port $P_INJ
-    probar /etc/hcr/hcr-server -l :$P_INJ
-    probar /etc/hcr/hcr-server -p $P_INJ
-    probar /etc/hcr/hcr-server --port $P_INJ
+    ./hcr-server -port $P_INJ || ./hcr-server server -port $P_INJ || ./hcr-server -listen :$P_INJ || ./hcr-server -p $P_INJ
 fi
-
-echo "=================================================" >> /etc/hcr/hcr.log
-echo "ERROR FATAL: El binario no funcionó con ninguna sintaxis." >> /etc/hcr/hcr.log
-exit 1
 EOF
     chmod +x /etc/hcr/start.sh
 
-    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
+    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
     
     fuser -k -9 $p_inj/tcp >/dev/null 2>&1
     lsof -ti tcp:$p_inj | xargs kill -9 2>/dev/null
@@ -648,15 +626,14 @@ EOF
     systemctl enable hcr-server >/dev/null 2>&1
     systemctl start hcr-server
     
-    # FORZAR LA APERTURA FÍSICA DEL PUERTO EN EL FIREWALL DE LINUX (IPTABLES + UFW)
     iptables -I INPUT -p tcp --dport $p_inj -j ACCEPT >/dev/null 2>&1
     ufw allow $p_inj/tcp >/dev/null 2>&1
     
-    sleep 4
-    if systemctl is-active --quiet hcr-server; then
-        echo -e "\n${V}¡Servidor HCR Iniciado Exitosamente y Listo!${N}"
+    sleep 2
+    if ss -tlnp | grep -qw "$p_inj"; then
+        echo -e "\n${V}¡ÉXITO! El motor encendió y el puerto $p_inj está verificado como ABIERTO.${N}"
     else
-        echo -e "\n${R}El servidor no arrancó. Ve a la Opción 7 para ver el log.${N}"
+        echo -e "\n${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.${N}"
     fi
     read -p " ► Enter para continuar..."
 }
