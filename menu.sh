@@ -249,7 +249,7 @@ case $op_udp in
 1)
 echo "Instalando servidor UDP Custom..."
 apt-get install -y iptables curl >/dev/null 2>&1
-curl -sL "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
+curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
 echo -e "{\n  \"listen\": \":36712\",\n  \"stream_buffer\": 33554432,\n  \"receive_buffer\": 8388608,\n  \"auth\": {\n    \"mode\": \"passwords\"\n  }\n}" > /root/udp/config.json
 echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
@@ -511,7 +511,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER DEFINITIVO ---------
+# --------- MODULO HCR SERVER DEFINITIVO (CORRECCIÓN TOTAL) ---------
 menu_hcr() {
 while true; do
     clear
@@ -594,19 +594,32 @@ instalar_hcr() {
     rm -f /etc/hcr/hcr-server
     apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
     
-    # Descarga infalible: Sin forzar red y probando multiples fuentes
-    wget -qO /etc/hcr/hcr-server "https://cdn.jsdelivr.net/gh/lacasitamx/SCRIPTMOD-LACASITA@main/hcr-server"
+    # LISTA DE RESPALDOS: Sin escáneres defectuosos, solo nos basamos en el tamaño real del programa.
+    MIRRORS=(
+        "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Plugins/hcr-server"
+        "https://raw.githubusercontent.com/ChumoGH/ScriptCGH/main/modulos/hcr-server"
+        "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
+        "https://raw.githubusercontent.com/VPS-Freenet/VPS-Freenet/main/Plugins/hcr"
+        "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
+    )
     
-    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
-        curl -sL "https://ghproxy.net/https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
-    fi
+    DESCARGA_EXITOSA=0
+    for url in "${MIRRORS[@]}"; do
+        echo -e "► Probando fuente..."
+        curl -sL "$url" -o /etc/hcr/hcr-server
+        # VERIFICADOR BASADO EN TAMAÑO REAL: Un programa debe pesar más de 1 MB.
+        TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
+        if [ "$TAMANO" -gt 1000000 ]; then
+            echo -e "${V}¡Archivo limpio y funcional encontrado!${N}"
+            DESCARGA_EXITOSA=1
+            break
+        fi
+        rm -f /etc/hcr/hcr-server
+    done
     
-    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
-        curl -sL "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
-    fi
-
-    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
-        echo -e "\n${R}[!] ERROR [!] No se pudo descargar el archivo de ninguna fuente.${N}"
+    if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
+        echo -e "\n${R}[!] ERROR CRÍTICO [!]${N}"
+        echo -e "${A}Ningún servidor en el mundo respondió correctamente.${N}"
         rm -f /etc/hcr/hcr-server
         read -p " ► Enter para regresar..."
         return
@@ -614,15 +627,16 @@ instalar_hcr() {
     
     chmod 777 /etc/hcr/hcr-server
     
+    # CORRECCIÓN VITAL: Sin el símbolo '&', para que el motor se ancle y abra el puerto.
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
 cd /etc/hcr
 
 if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -listen :$P_INJ -tls &
+    ./hcr-server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls
 else
-    ./hcr-server -listen :$P_INJ &
+    ./hcr-server -port $P_INJ || ./hcr-server -listen :$P_INJ
 fi
 EOF
     chmod +x /etc/hcr/start.sh
@@ -634,7 +648,7 @@ EOF
     
     systemctl daemon-reload
     systemctl enable hcr-server >/dev/null 2>&1
-    systemctl start hcr-server
+    systemctl restart hcr-server
     
     iptables -I INPUT -p tcp --dport $p_inj -j ACCEPT >/dev/null 2>&1
     ufw allow $p_inj/tcp >/dev/null 2>&1
