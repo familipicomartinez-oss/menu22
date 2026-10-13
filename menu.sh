@@ -351,8 +351,9 @@ echo -e " Estado actual: $P_V2"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 echo -e " ${V}[1]${N} 🟢 Instalar V2Ray/Xray (Modo WebSocket)"
 echo -e " ${A}[2]${N} ➕ Generar Nuevo Usuario (UUID)"
-echo -e " ${V}[3]${N} 👁️  Ver mis Datos y Link de Conexión"
-echo -e " ${R}[4]${N} 🗑️  Desinstalar Todo"
+echo -e " ${C}[3]${N} ⚙️  Modificar Puerto de Conexión"
+echo -e " ${V}[4]${N} 👁️  Ver mis Datos y Link de Conexión"
+echo -e " ${R}[5]${N} 🗑️  Desinstalar Todo"
 echo -e " ${C}[0]${N} ↩️  Volver al Menú Principal"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 read -p " ► Opcion : " op_v2
@@ -427,6 +428,35 @@ EOF
     read -p " ► Enter para continuar..." ;;
 3)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
+        echo -e "${R}V2Ray no está instalado. Instálalo primero (Opción 1).${N}"; read -p "Enter..."; continue
+    fi
+    pt_actual=$(cat /usr/local/etc/xray/puerto.txt)
+    echo -e "\n${C}=== MODIFICAR PUERTO V2RAY ===${N}"
+    echo -e " 🔹 Puerto actual: ${V}$pt_actual${N}"
+    read -p " ► Ingresa el NUEVO puerto a usar (Ej: 80, 443): " pt_nuevo
+    if [ -z "$pt_nuevo" ]; then
+        echo -e "${R}Cancelado.${N}"; read -p "Enter..."; continue
+    fi
+    
+    echo -e "\n${A}Liberando el nuevo puerto $pt_nuevo para evitar conflictos...${N}"
+    systemctl stop proxypy stunnel4 apache2 nginx dropbear 2>/dev/null
+    fuser -k -9 $pt_nuevo/tcp >/dev/null 2>&1
+    lsof -ti tcp:$pt_nuevo | xargs kill -9 2>/dev/null
+    
+    sed -i -E "s/\"port\": [0-9]+/\"port\": $pt_nuevo/" /usr/local/etc/xray/config.json
+    echo "$pt_nuevo" > /usr/local/etc/xray/puerto.txt
+    ufw allow $pt_nuevo/tcp >/dev/null 2>&1
+    systemctl restart xray
+    
+    sleep 2
+    if systemctl is-active --quiet xray; then
+        echo -e "\n${V}¡Puerto modificado exitosamente al $pt_nuevo!${N}"
+    else
+        echo -e "\n${R}ERROR: El puerto $pt_nuevo está bloqueado por el sistema. Intenta con otro.${N}"
+    fi
+    read -p " ► Enter para continuar..." ;;
+4)
+    if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e "${R}V2Ray no está instalado.${N}"; read -p "Enter..."; continue
     fi
     dom_v2=$(cat /usr/local/etc/xray/dominio.txt)
@@ -466,7 +496,7 @@ EOF
     echo -e " 🔗 ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):${N}\n"
     echo -e "${A}$VMESS_LINK${N}\n"
     read -p " ► Enter para continuar..." ;;
-4)
+5)
     systemctl stop xray >/dev/null 2>&1
     systemctl disable xray >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove >/dev/null 2>&1
