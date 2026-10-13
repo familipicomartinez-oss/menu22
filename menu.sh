@@ -577,16 +577,13 @@ while true; do
         3)
             if [ "$MODO" == "Plain" ]; then
                 sed -i "s/MODO=.*/MODO=\"TLS\"/" /etc/hcr/config
-                sed -i "s/-tls=false/-tls=true/" /etc/systemd/system/hcr-server.service
                 if [ ! -f /etc/hcr/cert.pem ]; then
                     echo -e "${A}Generando certificado TLS...${N}"
                     openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
                 fi
             else
                 sed -i "s/MODO=.*/MODO=\"Plain\"/" /etc/hcr/config
-                sed -i "s/-tls=true/-tls=false/" /etc/systemd/system/hcr-server.service
             fi
-            systemctl daemon-reload
             echo -e "${V}Modo cambiado. Reiniciando HCR...${N}"; systemctl restart hcr-server; sleep 1
             ;;
         4)
@@ -633,7 +630,7 @@ done
 instalar_hcr() {
     clear
     echo -e "${A}========= INSTALACION DE HCR SERVER =========${N}"
-    echo -e "${C}Descargando binario oficial de HCR...${N}"
+    echo -e "${C}Descargando binario oficial de HCR (Servidor Privado)...${N}"
     mkdir -p /etc/hcr
     
     read -p " Puerto de Inyección [Default 8080]: " p_inj
@@ -650,26 +647,51 @@ instalar_hcr() {
     
     if [ "$op_m" == "2" ]; then
         MODO="TLS"
-        TLS_FLAG="true"
         echo -e "\n${A}Generando certificado TLS...${N}"
         apt-get install openssl -y >/dev/null 2>&1
         openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
     else
         MODO="Plain"
-        TLS_FLAG="false"
     fi
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"\nMAX_FILE=\"16384\"" > /etc/hcr/config
 
-    wget -qO /etc/hcr/hcr-server "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
-    if [ ! -f /etc/hcr/hcr-server ]; then
-         wget -qO /etc/hcr/hcr-server "https://github.com/chukkteam/hcr-server/releases/download/v1.0/hcr-server-linux-amd64"
-    fi
-    
+    wget -qO /etc/hcr/hcr-server "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
     chmod +x /etc/hcr/hcr-server
     apt-get install lsof -y >/dev/null 2>&1
     
-    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/hcr-server -listen=:$p_inj -target=127.0.0.1:$p_dest -tls=$TLS_FLAG -cert=/etc/hcr/cert.pem -key=/etc/hcr/key.pem\nRestart=always\nLimitNOFILE=16384\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
+    cat << 'EOF' > /etc/hcr/start.sh
+#!/bin/bash
+source /etc/hcr/config
+if [ "$MODO" == "TLS" ]; then
+    /etc/hcr/hcr-server -listen :$P_INJ -target 127.0.0.1:$P_DEST -tls=true -cert /etc/hcr/cert.pem -key /etc/hcr/key.pem 2>/dev/null &
+    PID=$!
+    sleep 2; if ps -p $PID > /dev/null; then wait $PID; exit 0; fi
+    
+    /etc/hcr/hcr-server --port $P_INJ --target 127.0.0.1:$P_DEST --tls --cert /etc/hcr/cert.pem --key /etc/hcr/key.pem 2>/dev/null &
+    PID=$!
+    sleep 2; if ps -p $PID > /dev/null; then wait $PID; exit 0; fi
+
+    /etc/hcr/hcr-server --port $P_INJ --transport tls 2>/dev/null &
+    PID=$!
+    sleep 2; if ps -p $PID > /dev/null; then wait $PID; exit 0; fi
+else
+    /etc/hcr/hcr-server -listen :$P_INJ -target 127.0.0.1:$P_DEST -tls=false 2>/dev/null &
+    PID=$!
+    sleep 2; if ps -p $PID > /dev/null; then wait $PID; exit 0; fi
+    
+    /etc/hcr/hcr-server --port $P_INJ --target 127.0.0.1:$P_DEST 2>/dev/null &
+    PID=$!
+    sleep 2; if ps -p $PID > /dev/null; then wait $PID; exit 0; fi
+    
+    /etc/hcr/hcr-server --port $P_INJ --transport plain 2>/dev/null &
+    PID=$!
+    sleep 2; if ps -p $PID > /dev/null; then wait $PID; exit 0; fi
+fi
+EOF
+    chmod +x /etc/hcr/start.sh
+
+    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nLimitNOFILE=16384\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
     
     fuser -k -9 $p_inj/tcp >/dev/null 2>&1
     lsof -ti tcp:$p_inj | xargs kill -9 2>/dev/null
