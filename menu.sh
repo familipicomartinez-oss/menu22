@@ -551,7 +551,7 @@ while true; do
     echo -e "${C}================================================${N}"
     echo -e " ${V}[1]${N} ⚙️ Puerto Inyección [$P_INJ]  ${V}[2]${N} ⚙️ Puerto Destino   [$P_DEST]"
     echo -e " ${V}[3]${N} 🛡️ Modo             [$MODO]  ${V}[4]${N} 📦 Max On File      [$MAX_FILE]"
-    echo -e " ${A}[5]${N} 🟢 Iniciar/Detener           ${R}[6]${N} 🗑️ Desinstalar HCR"
+    echo -e " ${A}[5]${N} 🟢 Iniciar / Configurar      ${R}[6]${N} 🗑️ Desinstalar HCR"
     echo -e " ${C}[7]${N} 👁️ Ver Logs (Real-time)"
     echo -e " ${C}[0]${N} ↩️ REGRESAR"
     echo -e "${C}================================================${N}"
@@ -576,15 +576,16 @@ while true; do
             ;;
         3)
             if [ "$MODO" == "Plain" ]; then
-                sed -i "s/MODO=.*/MODO=\"TLS\"/" /etc/hcr/config
+                MODO="TLS"
                 if [ ! -f /etc/hcr/cert.pem ]; then
                     echo -e "${A}Generando certificado TLS...${N}"
                     openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
                 fi
             else
-                sed -i "s/MODO=.*/MODO=\"Plain\"/" /etc/hcr/config
+                MODO="Plain"
             fi
-            echo -e "${V}Modo cambiado. Reiniciando HCR...${N}"; systemctl restart hcr-server; sleep 1
+            sed -i "s/MODO=.*/MODO=\"$MODO\"/" /etc/hcr/config
+            echo -e "${V}Modo cambiado a $MODO.${N}"; sleep 1
             ;;
         4)
             read -p " Nuevo Max On File: " nuevo_max
@@ -596,20 +597,7 @@ while true; do
             fi
             ;;
         5)
-            if systemctl is-active --quiet hcr-server; then
-                systemctl stop hcr-server
-                echo -e "${A}Servidor HCR Detenido.${N}"; sleep 1
-            else
-                if [ ! -f /etc/hcr/hcr-server ]; then
-                    instalar_hcr
-                else
-                    source /etc/hcr/config
-                    fuser -k -9 $P_INJ/tcp >/dev/null 2>&1
-                    lsof -ti tcp:$P_INJ | xargs kill -9 2>/dev/null
-                    systemctl restart hcr-server
-                    echo -e "${V}Servidor HCR Iniciado.${N}"; sleep 1
-                fi
-            fi
+            instalar_hcr
             ;;
         6)
             systemctl stop hcr-server 2>/dev/null
@@ -629,34 +617,38 @@ done
 
 instalar_hcr() {
     clear
-    echo -e "${A}========= INSTALACION DE HCR SERVER =========${N}"
-    echo -e "${C}Descargando binario oficial de HCR (Servidor Privado)...${N}"
+    echo -e "${A}========= INSTALACION / INICIO HCR SERVER =========${N}"
     mkdir -p /etc/hcr
     
-    read -p " Puerto de Inyección [Default 8080]: " p_inj
+    read -p " ► Puerto de Inyección [Default 8080]: " p_inj
     p_inj=${p_inj:-8080}
     
-    read -p " Puerto de redireccionamiento [Default 22]: " p_dest
+    read -p " ► Puerto de redireccionamiento [Default 22]: " p_dest
     p_dest=${p_dest:-22}
     
-    echo -e "\n Modo de transporte:"
-    echo -e " [1] Plain (Recomendado)"
-    echo -e " [2] TLS (Generará certificado)"
-    read -p " Seleccione opción [Default 1]: " op_m
-    op_m=${op_m:-1}
+    echo -e "\n Seleccione Modo de transporte:"
+    echo -e " [1] Plain (Sin certificado)"
+    echo -e " [2] TLS (Con certificado SSL)"
+    read -p " ► Opcion [Default 2]: " op_m
+    op_m=${op_m:-2}
     
-    if [ "$op_m" == "2" ]; then
+    if [ "$op_m" == "1" ]; then
+        MODO="Plain"
+        TLS_FLAG="false"
+    else
         MODO="TLS"
+        TLS_FLAG="true"
         echo -e "\n${A}Generando certificado TLS...${N}"
         apt-get install openssl -y >/dev/null 2>&1
         openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
-    else
-        MODO="Plain"
     fi
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"\nMAX_FILE=\"16384\"" > /etc/hcr/config
 
-    wget -qO /etc/hcr/hcr-server "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
+    if [ ! -f /etc/hcr/hcr-server ]; then
+        echo -e "${C}Descargando binario oficial de HCR...${N}"
+        wget -qO /etc/hcr/hcr-server "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
+    fi
     chmod +x /etc/hcr/hcr-server
     apt-get install lsof -y >/dev/null 2>&1
     
@@ -701,8 +693,8 @@ EOF
     systemctl start hcr-server
     ufw allow $p_inj/tcp >/dev/null 2>&1
     
-    echo -e "\n${V}Instalación completada exitosamente.${N}"
-    sleep 2
+    echo -e "\n${V}¡HCR Server Iniciado y Configurado Correctamente!${N}"
+    read -p " ► Enter para continuar..."
 }
 # --------- FIN MODULO HCR SERVER ---------
 
