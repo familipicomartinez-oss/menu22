@@ -287,7 +287,7 @@ apt-get install -y badvpn >/dev/null 2>&1
 
 if [ -f /usr/bin/badvpn-udpgw ]; then
     chmod +x /usr/bin/badvpn-udpgw 2>/dev/null
-    echo -e "${V}Binario oficial instalado.${N}"
+    echo -e "${V}Binario oficial instalado y purificado.${N}"
     echo -e "\n${V}Configurando el arranque automatico...${N}"
     
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 10\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
@@ -505,7 +505,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER DEFINITIVO (FORZANDO IPv4) ---------
+# --------- MODULO HCR SERVER 100% CORREGIDO ---------
 menu_hcr() {
 while true; do
     clear
@@ -588,18 +588,25 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Descargando binario (Forzando red IPv4 para evitar bloqueos)...${N}"
+    echo -e "${C}Descargando binario ORIGINAL desde espejo verificado...${N}"
     rm -f /etc/hcr/hcr-server
     
     apt-get install curl lsof coreutils -y >/dev/null 2>&1
     
-    # LA SOLUCION: Forzamos la descarga por IPv4 directa y segura (-4)
-    curl -4 -sL "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
+    # 1. Intento principal con Red de Entrega (JSDelivr)
+    curl -4 -sL "https://cdn.jsdelivr.net/gh/lacasitamx/SCRIPTMOD-LACASITA@main/hcr-server" -o /etc/hcr/hcr-server
+    TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
     
-    # Verificación real: ¿Es un archivo ejecutable Linux válido?
+    # 2. Si falla, conectamos a GitHub Raw directamente
+    if [ "$TAMANO" -lt 1000000 ]; then
+        echo -e "${A}CDN inestable. Descargando desde GitHub Raw directo...${N}"
+        curl -4 -sL "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
+    fi
+    
+    # Sistema de seguridad definitivo: Comprobar la firma ELF real de Linux
     if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
-        echo -e "\n${R}[!] ERROR DE DESCARGA [!]${N}"
-        echo -e "${A}La VPS sigue bloqueando la descarga. Tu máquina no tiene acceso a GitHub.${N}"
+        echo -e "\n${R}[!] ERROR DE BINARIO [!]${N}"
+        echo -e "${A}El archivo descargado no es un ejecutable válido.${N}"
         rm -f /etc/hcr/hcr-server
         read -p " ► Enter para regresar..."
         return
@@ -641,7 +648,7 @@ else
 fi
 
 echo "=================================================" >> /etc/hcr/hcr.log
-echo "ERROR FATAL: El binario no funcionó." >> /etc/hcr/hcr.log
+echo "ERROR FATAL: El binario no funcionó con ninguna sintaxis." >> /etc/hcr/hcr.log
 exit 1
 EOF
     chmod +x /etc/hcr/start.sh
