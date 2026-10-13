@@ -249,7 +249,7 @@ case $op_udp in
 1)
 echo "Instalando servidor UDP Custom..."
 apt-get install -y iptables curl >/dev/null 2>&1
-curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
+curl -sL "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
 echo -e "{\n  \"listen\": \":36712\",\n  \"stream_buffer\": 33554432,\n  \"receive_buffer\": 8388608,\n  \"auth\": {\n    \"mode\": \"passwords\"\n  }\n}" > /root/udp/config.json
 echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
@@ -355,7 +355,7 @@ read -p " ► Opcion : " op_v2
 case $op_v2 in
 1)
     clear
-    echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY) ===${N}"
+    echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY OFICIAL) ===${N}"
     apt-get update -y >/dev/null 2>&1
     apt-get install -y jq uuid-runtime curl psmisc lsof openssl >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
@@ -553,11 +553,8 @@ while true; do
             ;;
         7)
             clear
-            echo -e "${A}=== LOGS DEL MOTOR HCR (Muestra errores reales) ===${N}"
-            echo -e "${C}Mostrando las últimas lineas del motor. Lee atentamente:${N}"
-            echo "---------------------------------------------------------"
+            echo -e "${A}=== LOGS DEL MOTOR HCR ===${N}"
             journalctl -u hcr-server -n 40 --no-pager
-            echo "---------------------------------------------------------"
             read -p " ► Enter para regresar..."
             ;;
         0) break ;;
@@ -567,7 +564,7 @@ done
 
 instalar_hcr() {
     clear
-    echo -e "${A}========= INSTALACION DIRECTA HCR SERVER =========${N}"
+    echo -e "${A}========= INSTALACION HCR SERVER =========${N}"
     mkdir -p /etc/hcr
     
     read -p " ► Puerto de Inyección [Default 8080]: " p_inj
@@ -595,20 +592,21 @@ instalar_hcr() {
 
     echo -e "${C}Descargando binario...${N}"
     rm -f /etc/hcr/hcr-server
-    apt-get install curl lsof coreutils -y >/dev/null 2>&1
+    apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
     
-    # URL directa de la versión de 64 bits para Linux
-    curl -4 -sL "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server" -o /etc/hcr/hcr-server
+    # Descarga infalible: Sin forzar red y probando multiples fuentes
+    wget -qO /etc/hcr/hcr-server "https://cdn.jsdelivr.net/gh/lacasitamx/SCRIPTMOD-LACASITA@main/hcr-server"
     
-    # Comprobar si se descargó correctamente
-    if ! grep -q "ELF" /etc/hcr/hcr-server; then
-        echo -e "${A}Intentando desde repositorio secundario...${N}"
-        curl -4 -sL "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
+    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
+        curl -sL "https://ghproxy.net/https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
+    fi
+    
+    if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
+        curl -sL "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server" -o /etc/hcr/hcr-server
     fi
 
     if ! head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
-        echo -e "\n${R}[!] ERROR CRÍTICO [!]${N}"
-        echo -e "${A}No se pudo descargar el archivo ejecutable. Verifica la conexión de la VPS.${N}"
+        echo -e "\n${R}[!] ERROR [!] No se pudo descargar el archivo de ninguna fuente.${N}"
         rm -f /etc/hcr/hcr-server
         read -p " ► Enter para regresar..."
         return
