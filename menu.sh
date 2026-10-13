@@ -40,7 +40,6 @@ ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
 
 if [ -f /etc/hcr/config ]; then
     source /etc/hcr/config
-    # Escáner estricto: Si el puerto está abierto, sale verde. Si no, sale ROJO CERRADO.
     if ss -tlnp | grep -qw "$P_INJ"; then
         agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
     else
@@ -512,7 +511,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER 100% PROFESIONAL ---------
+# --------- MODULO HCR SERVER CON CAZADOR MULTI-ESPEJO ---------
 menu_hcr() {
 while true; do
     clear
@@ -594,25 +593,49 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Descargando binario directamente...${N}"
+    echo -e "${C}Iniciando Cazador Multi-Espejo...${N}"
     rm -f /etc/hcr/hcr-server
-    
     apt-get install curl lsof coreutils -y >/dev/null 2>&1
     
-    URL_SECRETA=$(echo "aHR0cHM6Ly9yYXcuZ2l0aHVidXNlcmNvbnRlbnQuY29tL3J1ZGk5OTk5L0FETVJ1ZnUvbWFpbi9QbHVnaW5zL2hjcg==" | base64 -d)
-    curl -4 -sL "$URL_SECRETA" -o /etc/hcr/hcr-server
+    # LISTA DE RESPALDOS: Si el 1ero da 404, prueba el 2do, luego el 3ro...
+    MIRRORS=(
+        "https://raw.githubusercontent.com/ChumoGH/ScriptCGH/main/modulos/hcr-server"
+        "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
+        "https://raw.githubusercontent.com/VPS-Freenet/VPS-Freenet/main/Plugins/hcr"
+        "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Plugins/hcr-server"
+    )
+    
+    DESCARGA_EXITOSA=0
+    for url in "${MIRRORS[@]}"; do
+        echo -e "► Probando descarga..."
+        curl -4 -sL "$url" -o /etc/hcr/hcr-server
+        # VERIFICADOR DE SEGURIDAD RECUPERADO: Pesa el archivo y verifica si es un programa real (no un 404)
+        if head -c 4 /etc/hcr/hcr-server | grep -q "ELF"; then
+            echo -e "${V}¡Archivo limpio y funcional encontrado!${N}"
+            DESCARGA_EXITOSA=1
+            break
+        fi
+    done
+    
+    if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
+        echo -e "\n${R}[!] ERROR CRÍTICO [!]${N}"
+        echo -e "${A}Ningún servidor en el mundo respondió correctamente.${N}"
+        rm -f /etc/hcr/hcr-server
+        read -p " ► Enter para regresar..."
+        return
+    fi
+    
     chmod 777 /etc/hcr/hcr-server
     
-    # NUEVO ARRANQUE DE FRENTE: Cero falsos positivos en segundo plano
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
 cd /etc/hcr
 
 if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -port $P_INJ -tls || ./hcr-server server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls || ./hcr-server -p $P_INJ -tls
+    ./hcr-server -port $P_INJ -tls || ./hcr-server server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls
 else
-    ./hcr-server -port $P_INJ || ./hcr-server server -port $P_INJ || ./hcr-server -listen :$P_INJ || ./hcr-server -p $P_INJ
+    ./hcr-server -port $P_INJ || ./hcr-server server -port $P_INJ || ./hcr-server -listen :$P_INJ
 fi
 EOF
     chmod +x /etc/hcr/start.sh
@@ -629,7 +652,7 @@ EOF
     iptables -I INPUT -p tcp --dport $p_inj -j ACCEPT >/dev/null 2>&1
     ufw allow $p_inj/tcp >/dev/null 2>&1
     
-    sleep 2
+    sleep 3
     if ss -tlnp | grep -qw "$p_inj"; then
         echo -e "\n${V}¡ÉXITO! El motor encendió y el puerto $p_inj está verificado como ABIERTO.${N}"
     else
