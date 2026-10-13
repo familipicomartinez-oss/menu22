@@ -361,13 +361,20 @@ case $op_v2 in
     clear
     echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY) ===${N}"
     apt-get update -y >/dev/null 2>&1
-    apt-get install -y jq uuid-runtime curl >/dev/null 2>&1
+    apt-get install -y jq uuid-runtime curl psmisc lsof >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===${N}"
     read -p " ► Puerto a usar (Ej: 80 o 443): " pt_v2; pt_v2=${pt_v2:-80}
     read -p " ► Tu Dominio/SNI (Ej: midominio.com o IP): " dom_v2; dom_v2=${dom_v2:-$IP_VPS}
     UUID=$(uuidgen)
+    
+    # Escáner profundo y erradicación de rastros zombie
+    echo -e "\n${A}Realizando escaneo a fondo y erradicando rastros ocultos en el puerto $pt_v2...${N}"
+    systemctl stop proxypy stunnel4 apache2 nginx dropbear 2>/dev/null
+    fuser -k -9 $pt_v2/tcp >/dev/null 2>&1
+    lsof -ti tcp:$pt_v2 | xargs kill -9 2>/dev/null
+    sleep 2
     
     mkdir -p /usr/local/etc/xray
     cat <<EOF > /usr/local/etc/xray/config.json
@@ -396,10 +403,16 @@ EOF
     systemctl enable xray >/dev/null 2>&1
     ufw allow $pt_v2/tcp >/dev/null 2>&1
     
-    echo -e "\n${V}¡V2Ray Instalado y Activo!${N}"
-    echo -e "Dominio configurado: $dom_v2"
-    echo -e "Puerto configurado: $pt_v2"
-    echo -e "UUID: $UUID"
+    sleep 2
+    if systemctl is-active --quiet xray; then
+        echo -e "\n${V}¡V2Ray Instalado y Activo!${N}"
+        echo -e "Dominio configurado: $dom_v2"
+        echo -e "Puerto configurado: $pt_v2"
+        echo -e "UUID: $UUID"
+    else
+        echo -e "\n${R}ERROR: V2Ray no pudo iniciar. Imprimiendo reporte del sistema:${N}"
+        journalctl -u xray --no-pager -n 5
+    fi
     read -p " ► Enter para continuar..." ;;
 2)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
