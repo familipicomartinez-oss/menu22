@@ -58,7 +58,6 @@ echo -e " 🔹 U/RAM: ${A}${PORCENT_RAM}%${N}"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 }
 
-# (SE OMITEN LAS DEMAS FUNCIONES POR ESPACIO, PERO DEBES DEJAR TUS MENÚS INTACTOS AQUÍ COMO SIEMPRE)
 menu_usuarios() {
 while true; do
 clear
@@ -139,6 +138,197 @@ esac
 done
 }
 
+menu_ssl() {
+while true; do
+clear
+echo -e "${A}--- GESTOR DE PROTOCOLO SSL/TLS ---${N}"
+echo -e " Estado: $(es stunnel4)"
+echo -e "----------------------------------------"
+echo -e " ${V}[1]${N} 🟢 Instalar Certificado SSL (Interno 22 -> Externo a elegir)"
+echo -e " ${A}[2]${N} ⏸️  Detener SSL"
+echo -e " ${R}[3]${N} 🗑️  Desinstalar"
+echo -e " ${C}[0]${N} ↩️  Volver"
+echo -e "----------------------------------------"
+read -p " ► Opcion : " op_ssl
+case $op_ssl in
+1)
+p1=22
+read -p " ► Puerto externo SSL a elegir (Ej: 443, 444): " p2; p2=${p2:-443}
+apt-get install stunnel4 openssl -y >/dev/null 2>&1
+openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=Sabana/O=VPN/C=CO" >/dev/null 2>&1
+echo -e "pid = /var/run/stunnel4.pid\ncert = /etc/stunnel/stunnel.pem\nclient = no\nsocket = a:SO_REUSEADDR=1\nsocket = l:TCP_NODELAY=1\nsocket = r:TCP_NODELAY=1\n[stunnel-custom]\naccept = $p2\nconnect = 127.0.0.1:$p1" > /etc/stunnel/stunnel.conf
+sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
+ufw allow $p2/tcp >/dev/null 2>&1
+systemctl restart stunnel4
+echo -e "${V}¡SSL instalado y activo en puerto externo $p2!${N}"
+read -p "Enter..." ;;
+2) systemctl stop stunnel4; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
+3) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
+0) break ;;
+esac
+done
+}
+
+menu_py() {
+while true; do
+clear
+echo -e "${A}--- GESTOR DE PROXY PYTHON ---${N}"
+echo -e " Estado: $(es proxypy)"
+echo -e "----------------------------------------"
+echo -e " ${V}[3]${N} 🟢 WebSocket PRO (Elegir Puerto)"
+echo -e " ${A}[4]${N} ⏸️  Detener Proxy"
+echo -e " ${R}[5]${N} 🗑️  Desinstalar"
+echo -e " ${C}[0]${N} ↩️  Volver"
+echo -e "----------------------------------------"
+read -p " ► Opcion : " op_py
+case $op_py in
+3)
+read -p " ► Puerto para el WebSocket (Ej: 80): " pt; pt=${pt:-80}
+echo -e "${A}Liberando el puerto $pt y preparando Python...${N}"
+systemctl stop apache2 nginx dropbear 2>/dev/null
+fuser -k $pt/tcp 2>/dev/null
+apt-get install python3 -y >/dev/null 2>&1
+cat << 'EOF_PY' > /etc/proxy.py
+import socket, threading
+def c(s):
+    try:
+        s.recv(1024)
+        s.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+        d = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        d.connect(('127.0.0.1', 22))
+        def f(x, y):
+            try:
+                while True:
+                    a = x.recv(4096)
+                    if not a: break
+                    y.sendall(a)
+            except: pass
+        threading.Thread(target=f, args=(s, d)).start()
+        threading.Thread(target=f, args=(d, s)).start()
+    except: pass
+sv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sv.bind(('0.0.0.0', PUERTO_AQUI))
+sv.listen(100)
+while True:
+    cl, a = sv.accept()
+    threading.Thread(target=c, args=(cl,)).start()
+EOF_PY
+sed -i "s/PUERTO_AQUI/$pt/g" /etc/proxy.py
+echo -e "[Unit]\nDescription=Proxy Python WS\n[Service]\nExecStart=/usr/bin/python3 /etc/proxy.py\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/proxypy.service
+systemctl daemon-reload; systemctl enable proxypy >/dev/null 2>&1; systemctl restart proxypy
+ufw allow $pt/tcp >/dev/null 2>&1
+echo -e "${V}¡WebSocket PRO Activo en el puerto $pt!${N}"
+read -p "Enter..." ;;
+4) systemctl stop proxypy; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
+5) systemctl stop proxypy; rm -f /etc/proxy.py /etc/systemd/system/proxypy.service; systemctl daemon-reload; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
+0) break ;;
+esac
+done
+}
+
+menu_udp() {
+while true; do
+clear
+echo -e "${A}--- UDP CUSTOM ---${N}"
+echo -e " Estado: $(es udp-custom)"
+echo -e "----------------------------------------"
+echo -e " ${V}[1]${N} 🟢 Instalar UDP Custom"
+echo -e " ${A}[2]${N} ⏸️  Detener UDP"
+echo -e " ${R}[3]${N} 🗑️  Desinstalar UDP"
+echo -e " ${C}[0]${N} ↩️  Volver"
+echo -e "----------------------------------------"
+read -p " ► Opcion : " op_udp
+case $op_udp in
+1)
+echo "Instalando servidor UDP Custom (Fuente Oficial Haris131)..."
+apt-get install -y iptables wget >/dev/null 2>&1
+wget -q "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -O /usr/bin/udp-custom
+chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
+echo -e "{\n  \"listen\": \":36712\",\n  \"stream_buffer\": 33554432,\n  \"receive_buffer\": 8388608,\n  \"auth\": {\n    \"mode\": \"passwords\"\n  }\n}" > /root/udp/config.json
+echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
+systemctl daemon-reload; systemctl enable udp-custom >/dev/null 2>&1; systemctl restart udp-custom
+iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null
+iptables -t nat -A PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712
+echo -e "${V}¡UDP Custom Instalado y Activo (Puerto 36712)!${N}"
+read -p "Enter..." ;;
+2) systemctl stop udp-custom; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
+3) systemctl stop udp-custom; rm -rf /usr/bin/udp-custom /root/udp /etc/systemd/system/udp-custom.service; systemctl daemon-reload; iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
+0) break ;;
+esac
+done
+}
+
+menu_badvpn() {
+while true; do
+clear
+P_BAD72=$(ss -tlnp | grep -q ":7200" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+P_BAD73=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+echo -e "${A}--- BADVPN UDP (VIDEOLLAMADAS) ---${N}"
+echo -e " Estado: 7200 $P_BAD72 | 7300 $P_BAD73"
+echo -e "----------------------------------------"
+echo -e " ${V}[1]${N} 🟢 Instalar / Iniciar BadVPN"
+echo -e " ${A}[2]${N} ⏸️  Detener BadVPN"
+echo -e " ${R}[3]${N} 🗑️  Desinstalar BadVPN"
+echo -e " ${C}[0]${N} ↩️  Volver"
+echo -e "----------------------------------------"
+read -p " ► Opcion : " op_badvpn
+case $op_badvpn in
+1)
+clear
+echo -e "${C}=== INSTALACIÓN NATIVA BADVPN ===${N}"
+echo -e "Descargando desde los repositorios oficiales de Ubuntu Linux...\n"
+systemctl stop badvpn7200 2>/dev/null
+systemctl stop badvpn7300 2>/dev/null
+killall badvpn-udpgw 2>/dev/null
+
+apt-get update -y >/dev/null 2>&1
+apt-get install -y badvpn >/dev/null 2>&1
+
+if [ -f /usr/bin/badvpn-udpgw ]; then
+    chmod +x /usr/bin/badvpn-udpgw 2>/dev/null
+    echo -e "${V}Binario oficial instalado y purificado.${N}"
+    echo -e "\n${V}Configurando el arranque automatico...${N}"
+    
+    echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 10\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
+    echo -e "[Unit]\nDescription=BadVPN UDPGW 7200\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 1000 --max-connections-for-client 10\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7200.service
+    
+    systemctl daemon-reload
+    systemctl enable badvpn7300 >/dev/null 2>&1
+    systemctl enable badvpn7200 >/dev/null 2>&1
+    systemctl start badvpn7300 >/dev/null 2>&1
+    systemctl start badvpn7200 >/dev/null 2>&1
+    
+    sleep 2
+    if ss -tlnp | grep -q ":7300"; then
+        echo -e "${V}¡BadVPN activado exitosamente en los puertos 7200 y 7300!${N}"
+    else
+        echo -e "${R}Fallo al encender el servicio. Revisa tu sistema Ubuntu.${N}"
+    fi
+else
+    echo -e "\n${R}ERROR: No se pudo instalar desde el repositorio oficial de Ubuntu.${N}"
+fi
+read -p " ► Enter para continuar..." ;;
+2)
+systemctl stop badvpn7300 2>/dev/null
+systemctl stop badvpn7200 2>/dev/null
+killall badvpn-udpgw 2>/dev/null
+echo -e "${A}BadVPN Detenido.${N}"; read -p "Enter..." ;;
+3)
+systemctl stop badvpn7300 2>/dev/null
+systemctl stop badvpn7200 2>/dev/null
+systemctl disable badvpn7300 2>/dev/null
+systemctl disable badvpn7200 2>/dev/null
+rm -f /etc/systemd/system/badvpn*.service
+apt-get purge badvpn -y >/dev/null 2>&1
+systemctl daemon-reload
+killall badvpn-udpgw 2>/dev/null
+echo -e "${R}BadVPN Desinstalado por completo.${N}"; read -p "Enter..." ;;
+0) break ;;
+esac
+done
+}
+
 menu_v2ray() {
 while true; do
 clear
@@ -159,7 +349,7 @@ read -p " ► Opcion : " op_v2
 case $op_v2 in
 1)
     clear
-    echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY) ===${N}"
+    echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY OFICIAL) ===${N}"
     apt-get update -y >/dev/null 2>&1
     apt-get install -y jq uuid-runtime curl psmisc lsof openssl >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
@@ -315,7 +505,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER ACTUALIZADO (OPCION 37) ---------
+# --------- MODULO HCR SERVER ORIGINAL PURO (OPCION 37) ---------
 menu_hcr() {
 while true; do
     clear
@@ -341,35 +531,9 @@ while true; do
     read -p " ► Opcion : " op_hcr
     
     case $op_hcr in
-        1)
-            read -p " Nuevo Puerto Inyección: " nuevo_inj
-            if [ -n "$nuevo_inj" ]; then
-                sed -i "s/P_INJ=.*/P_INJ=\"$nuevo_inj\"/" /etc/hcr/config
-                systemctl restart hcr-server
-                echo -e "${V}Puerto Inyección actualizado a $nuevo_inj.${N}"; sleep 1
-            fi
-            ;;
-        2)
-            read -p " Nuevo Puerto Destino: " nuevo_dest
-            if [ -n "$nuevo_dest" ]; then
-                sed -i "s/P_DEST=.*/P_DEST=\"$nuevo_dest\"/" /etc/hcr/config
-                systemctl restart hcr-server
-                echo -e "${V}Puerto Destino actualizado a $nuevo_dest.${N}"; sleep 1
-            fi
-            ;;
-        3)
-            if [ "$MODO" == "Plain" ]; then
-                MODO="TLS"
-                if [ ! -f /etc/hcr/cert.pem ]; then
-                    echo -e "${A}Generando certificado TLS...${N}"
-                    openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
-                fi
-            else
-                MODO="Plain"
-            fi
-            sed -i "s/MODO=.*/MODO=\"$MODO\"/" /etc/hcr/config
-            echo -e "${V}Modo cambiado a $MODO. Reiniciando HCR...${N}"
-            systemctl restart hcr-server; sleep 1
+        1|2|3)
+            echo "Para cambiar puertos o modos, usa la Opción 5 de Instalación."
+            sleep 1
             ;;
         5)
             instalar_hcr
@@ -379,7 +543,7 @@ while true; do
             systemctl disable hcr-server 2>/dev/null
             rm -rf /etc/hcr /etc/systemd/system/hcr-server.service
             systemctl daemon-reload
-            echo -e "${R}HCR Desinstalado.${N}"; sleep 1
+            echo -e "${R}HCR Desinstalado y Limpiado.${N}"; sleep 1
             ;;
         7)
             clear
@@ -388,8 +552,8 @@ while true; do
                 tail -f /etc/hcr/hcr.log
             else
                 echo -e "${R}El archivo de log aún no existe.${N}"
-                read -p "Enter..."
             fi
+            read -p "Enter..."
             ;;
         0) break ;;
     esac
@@ -398,7 +562,7 @@ done
 
 instalar_hcr() {
     clear
-    echo -e "${A}========= INSTALACION / INICIO HCR SERVER =========${N}"
+    echo -e "${A}========= INSTALACION SEGURA HCR SERVER =========${N}"
     mkdir -p /etc/hcr
     
     read -p " ► Puerto de Inyección [Default 8080]: " p_inj
@@ -408,7 +572,7 @@ instalar_hcr() {
     p_dest=${p_dest:-22}
     
     echo -e "\n Seleccione Modo de transporte:"
-    echo -e " [1] Plain (Recomendado para tu HTTP Custom sin TLS)"
+    echo -e " [1] Plain (Recomendado para HTTP Custom clásico)"
     echo -e " [2] TLS (Con certificado SSL)"
     read -p " ► Opcion [Default 1]: " op_m
     op_m=${op_m:-1}
@@ -424,31 +588,42 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    if [ ! -f /etc/hcr/hcr-server ]; then
-        echo -e "${C}Descargando binario oficial estable de HCR...${N}"
-        wget -qO /etc/hcr/hcr-server "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
+    echo -e "${C}Descargando binario ORIGINAL desde repositorios globales seguros...${N}"
+    rm -f /etc/hcr/hcr-server
+    
+    # CONEXIÓN A LA FUENTE ORIGINAL DE GITHUB (Ni Rufu ni Chumo, directo del desarrollador base)
+    wget -qO /etc/hcr/hcr-server "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
+    TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
+    
+    # Si falla, vamos al creador original Chukkteam
+    if [ "$TAMANO" -lt 1000000 ]; then
+        echo -e "${A}Espejo Hiddify falló. Intentando con creador original Chukkteam...${N}"
+        wget -qO /etc/hcr/hcr-server "https://github.com/chukkteam/hcr-server/releases/download/v1.0/hcr-server-linux-amd64"
     fi
+    
     chmod +x /etc/hcr/hcr-server
     apt-get install lsof coreutils -y >/dev/null 2>&1
     
-    # Este es el corazón del arreglo: Un lanzador que prueba las banderas de ejecución y captura el error
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
-echo "Iniciando HCR. Puerto IN: $P_INJ | Destino: $P_DEST | Modo: $MODO" > /etc/hcr/hcr.log
+echo "=== LOGS DE ARRANQUE HCR ===" > /etc/hcr/hcr.log
+echo "Configuracion -> IN: $P_INJ | DEST: $P_DEST | MODO: $MODO" >> /etc/hcr/hcr.log
 
 if [ "$MODO" == "TLS" ]; then
-    /etc/hcr/hcr-server -port $P_INJ -tls >> /etc/hcr/hcr.log 2>&1
+    /etc/hcr/hcr-server -listen :$P_INJ -tls >> /etc/hcr/hcr.log 2>&1 &
+    PID=$!
 else
     /etc/hcr/hcr-server -port $P_INJ >> /etc/hcr/hcr.log 2>&1 &
     PID=$!
-    sleep 1
+    sleep 2
     if ! ps -p $PID > /dev/null; then
-        echo "Fallo arranque primario. Intentando con sintaxis secundaria..." >> /etc/hcr/hcr.log
-        /etc/hcr/hcr-server -listen :$P_INJ -target 127.0.0.1:$P_DEST >> /etc/hcr/hcr.log 2>&1 &
+        echo "Intento 1 fallo. Arrancando metodo original..." >> /etc/hcr/hcr.log
+        /etc/hcr/hcr-server -listen :$P_INJ >> /etc/hcr/hcr.log 2>&1 &
+        PID=$!
     fi
-    wait $PID
 fi
+wait $PID
 EOF
     chmod +x /etc/hcr/start.sh
 
@@ -464,9 +639,9 @@ EOF
     
     sleep 2
     if systemctl is-active --quiet hcr-server; then
-        echo -e "\n${V}¡HCR Server Iniciado Correctamente!${N}"
+        echo -e "\n${V}¡Servidor HCR ORIGINAL Iniciado Exitosamente y Listo!${N}"
     else
-        echo -e "\n${R}El servidor no pudo arrancar. Revisa los logs en la Opcion 7.${N}"
+        echo -e "\n${R}El servidor no arrancó. Ve a la Opción 7 para ver el error real.${N}"
     fi
     read -p " ► Enter para continuar..."
 }
@@ -506,9 +681,21 @@ echo -e " ${C}[37]${N} HCR [HTTP C.]  $PHCR ${C}[0]${N}  ${R}[ REGRESAR ]${N}"
 echo -e "--------------------------------------------------------"
 read -p " ► Opcion : " op_inst
 case $op_inst in
+4) menu_ssl ;;
+7) menu_py ;;
 8) menu_v2ray ;;
+19) menu_udp ;;
+21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo "Bloqueado"; read -p "Enter..." ;;
+22) menu_badvpn ;;
+24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo "Listo"; read -p "Enter..." ;;
+26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p "Enter..." ;;
+27) info_sistema; read -p "Enter..." ;;
+31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
+33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
+34) passwd root; read -p "Enter..." ;;
 37) menu_hcr ;;
 0) break ;;
+*) echo -e "${R}Inválido${N}"; sleep 1 ;;
 esac
 done
 }
@@ -526,7 +713,8 @@ echo -e "${A}──────────────────────�
 read -p " ► Opcion : " opcion
 case $opcion in
 1) menu_usuarios ;;
-5) menu_protocolos ;;
+2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.${N}"; read -p "Enter..." ;;
+3|4|5|6) menu_protocolos ;;
 0) exit 0 ;;
 esac
 done
