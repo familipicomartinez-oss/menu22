@@ -23,8 +23,15 @@ C_PORT=0
 fi
 }
 ss -tlnp | grep -q ":22 " && agregar_puerto "🔹 SSH: ${V}22${N}"
-ss -tlnp | grep -q ":80 " && agregar_puerto "🔹 PROXY: ${V}80${N}"
-ss -tlnp | grep -q ":443 " && agregar_puerto "🔹 SSL: ${V}443${N}"
+
+if ss -tlnp | grep -q ":80 "; then
+    systemctl is-active --quiet xray && grep -q '"port": 80' /usr/local/etc/xray/config.json 2>/dev/null && agregar_puerto "🔹 V2RAY: ${V}80${N}" || agregar_puerto "🔹 PROXY: ${V}80${N}"
+fi
+
+if ss -tlnp | grep -q ":443 "; then
+    systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && agregar_puerto "🔹 V2RAY: ${V}443${N}" || agregar_puerto "🔹 SSL: ${V}443${N}"
+fi
+
 ss -tlnp | grep -q ":444 " && agregar_puerto "🔹 SSL: ${V}444${N}"
 ss -ulnp | grep -q ":36712" && agregar_puerto "🔹 UDP: ${V}36712${N}"
 ss -tlnp | grep -q ":53 " && agregar_puerto "🔹 DNS: ${V}53${N}"
@@ -103,8 +110,12 @@ echo -e "${C}* Puertas Activas en su Servidor *${N}"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 STR_P=""
 ss -tlnp | grep -q ":22 " && STR_P+="🔹 SSH: ${V}22${N}   "
-ss -tlnp | grep -q ":80 " && STR_P+="🔹 PROXY: ${V}80${N}   "
-ss -tlnp | grep -q ":443 " && STR_P+="🔹 SSL: ${V}443${N}   "
+if ss -tlnp | grep -q ":80 "; then
+    systemctl is-active --quiet xray && grep -q '"port": 80' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="🔹 V2RAY: ${V}80${N}   " || STR_P+="🔹 PROXY: ${V}80${N}   "
+fi
+if ss -tlnp | grep -q ":443 "; then
+    systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="🔹 V2RAY: ${V}443${N}   " || STR_P+="🔹 SSL: ${V}443${N}   "
+fi
 ss -ulnp | grep -q ":36712" && STR_P+="🔹 UDP: ${V}36712${N}   "
 [ -z "$STR_P" ] && STR_P="🔹 ${R}Sin puertos configurados${N}"
 echo -e " $STR_P"
