@@ -362,22 +362,25 @@ case $op_v2 in
     clear
     echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY) ===${N}"
     apt-get update -y >/dev/null 2>&1
-    apt-get install -y jq uuid-runtime curl psmisc lsof >/dev/null 2>&1
+    apt-get install -y jq uuid-runtime curl psmisc lsof openssl >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===${N}"
-    read -p " ► Puerto a usar (Ej: 80 o 443): " pt_v2; pt_v2=${pt_v2:-80}
-    read -p " ► Tu Dominio/SNI (Ej: midominio.com o IP): " dom_v2; dom_v2=${dom_v2:-$IP_VPS}
+    read -p " ► Puerto a usar (Recomendado: 443): " pt_v2; pt_v2=${pt_v2:-443}
+    read -p " ► Tu Dominio del Servidor (Ej: movistar.zex.digital): " dom_v2; dom_v2=${dom_v2:-$IP_VPS}
     UUID=$(uuidgen)
     
-    # Escáner profundo y erradicación de rastros zombie
-    echo -e "\n${A}Realizando escaneo a fondo y erradicando rastros ocultos en el puerto $pt_v2...${N}"
+    echo -e "\n${A}Realizando escaneo a fondo y liberando el puerto $pt_v2...${N}"
     systemctl stop proxypy stunnel4 apache2 nginx dropbear 2>/dev/null
     fuser -k -9 $pt_v2/tcp >/dev/null 2>&1
     lsof -ti tcp:$pt_v2 | xargs kill -9 2>/dev/null
     sleep 2
     
+    echo -e "${A}Generando Certificado de Seguridad (TLS) interno...${N}"
     mkdir -p /usr/local/etc/xray
+    openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=Sabana/O=Osmaca/CN=$dom_v2" >/dev/null 2>&1
+    chmod 644 /usr/local/etc/xray/private.key /usr/local/etc/xray/cert.crt
+    
     cat <<EOF > /usr/local/etc/xray/config.json
 {
   "log": { "loglevel": "warning" },
@@ -390,6 +393,15 @@ case $op_v2 in
     },
     "streamSettings": {
       "network": "ws",
+      "security": "tls",
+      "tlsSettings": {
+        "certificates": [
+          {
+            "certificateFile": "/usr/local/etc/xray/cert.crt",
+            "keyFile": "/usr/local/etc/xray/private.key"
+          }
+        ]
+      },
       "wsSettings": { "path": "/osmaca" }
     }
   }],
@@ -406,13 +418,9 @@ EOF
     
     sleep 2
     if systemctl is-active --quiet xray; then
-        echo -e "\n${V}¡V2Ray Instalado y Activo!${N}"
-        echo -e "Dominio configurado: $dom_v2"
-        echo -e "Puerto configurado: $pt_v2"
-        echo -e "UUID: $UUID"
+        echo -e "\n${V}¡V2Ray Instalado y Activo con TLS!${N}"
     else
-        echo -e "\n${R}ERROR: V2Ray no pudo iniciar. Imprimiendo reporte del sistema:${N}"
-        journalctl -u xray --no-pager -n 5
+        echo -e "\n${R}ERROR: V2Ray no pudo iniciar.${N}"
     fi
     read -p " ► Enter para continuar..." ;;
 2)
@@ -463,9 +471,6 @@ EOF
     pt_v2=$(cat /usr/local/etc/xray/puerto.txt)
     UUID=$(cat /usr/local/etc/xray/uuid.txt)
     
-    TLS_STATUS=""
-    if [ "$pt_v2" == "443" ] || [ "$pt_v2" == "444" ]; then TLS_STATUS="tls"; fi
-    
     cat <<EOF > /tmp/vmess.json
 {
   "v": "2",
@@ -479,7 +484,9 @@ EOF
   "type": "none",
   "host": "$dom_v2",
   "path": "/osmaca",
-  "tls": "$TLS_STATUS"
+  "tls": "tls",
+  "sni": "$dom_v2",
+  "alpn": ""
 }
 EOF
     VMESS_BASE64=$(cat /tmp/vmess.json | base64 -w 0)
@@ -487,11 +494,12 @@ EOF
     
     clear
     echo -e "${C}=== TUS DATOS DE V2RAY ===${N}"
-    echo -e " 🔹 Dominio / Host : ${V}$dom_v2${N}"
+    echo -e " 🔹 Dominio Server : ${V}$dom_v2${N}"
     echo -e " 🔹 Puerto         : ${V}$pt_v2${N}"
     echo -e " 🔹 UUID           : ${A}$UUID${N}"
     echo -e " 🔹 Protocolo      : WebSocket (WS)"
     echo -e " 🔹 Path           : /osmaca"
+    echo -e " 🔹 Seguridad      : TLS (Activada)"
     echo -e "${C}================================================${N}"
     echo -e " 🔗 ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):${N}\n"
     echo -e "${A}$VMESS_LINK${N}\n"
