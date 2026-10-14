@@ -283,7 +283,6 @@ case $op_badvpn in
 1)
 clear
 echo -e "${C}=== INSTALACIÓN NATIVA BADVPN ===${N}"
-echo -e "Descargando desde los repositorios oficiales de Ubuntu Linux...\n"
 systemctl stop badvpn7200 2>/dev/null
 systemctl stop badvpn7300 2>/dev/null
 killall badvpn-udpgw 2>/dev/null
@@ -294,7 +293,6 @@ apt-get install -y badvpn >/dev/null 2>&1
 if [ -f /usr/bin/badvpn-udpgw ]; then
     chmod +x /usr/bin/badvpn-udpgw 2>/dev/null
     echo -e "${V}Binario oficial instalado y purificado.${N}"
-    echo -e "\n${V}Configurando el arranque automatico...${N}"
     
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 10\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7200\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 1000 --max-connections-for-client 10\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7200.service
@@ -365,13 +363,11 @@ case $op_v2 in
     read -p " ► Tu Dominio del Servidor (Ej: movistar.zex.digital): " dom_v2; dom_v2=${dom_v2:-$IP_VPS}
     UUID=$(uuidgen)
     
-    echo -e "\n${A}Realizando escaneo a fondo y liberando el puerto $pt_v2...${N}"
     systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
     fuser -k -9 $pt_v2/tcp >/dev/null 2>&1
     lsof -ti tcp:$pt_v2 | xargs kill -9 2>/dev/null
     sleep 2
     
-    echo -e "${A}Generando Certificado de Seguridad (TLS) interno...${N}"
     mkdir -p /usr/local/etc/xray
     openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=Sabana/O=Osmaca/CN=$dom_v2" >/dev/null 2>&1
     chmod 644 /usr/local/etc/xray/private.key /usr/local/etc/xray/cert.crt
@@ -441,7 +437,6 @@ EOF
         echo -e "${R}Cancelado.${N}"; read -p "Enter..."; continue
     fi
     
-    echo -e "\n${A}Liberando el nuevo puerto $pt_nuevo para evitar conflictos...${N}"
     systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
     fuser -k -9 $pt_nuevo/tcp >/dev/null 2>&1
     lsof -ti tcp:$pt_nuevo | xargs kill -9 2>/dev/null
@@ -511,7 +506,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER 100% CORREGIDO (SIN FILTROS QUE BORRAN) ---------
+# --------- MÓDULO HCR PROXY NATIVO DE PYTHON ---------
 menu_hcr() {
 while true; do
     clear
@@ -531,7 +526,7 @@ while true; do
     echo -e " ${V}[1]${N} ⚙️ Puerto Inyección [$P_INJ]  ${V}[2]${N} ⚙️ Puerto Destino [$P_DEST]"
     echo -e " ${V}[3]${N} 🛡️ Modo             [$MODO] "
     echo -e " ${A}[5]${N} 🟢 Iniciar / Configurar      ${R}[6]${N} 🗑️ Desinstalar HCR"
-    echo -e " ${C}[7]${N} 👁️ Ver Errores del Servidor (Log Real de Linux)"
+    echo -e " ${C}[7]${N} 👁️ Ver Errores del Servidor (Log)"
     echo -e " ${C}[0]${N} ↩️ REGRESAR"
     echo -e "${C}================================================${N}"
     read -p " ► Opcion : " op_hcr
@@ -590,60 +585,62 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Iniciando Descarga Robusta...${N}"
-    rm -f /etc/hcr/hcr-server
-    apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
+    echo -e "${C}Configurando Proxy Python Nativo...${N}"
+    apt-get install python3 lsof coreutils iptables -y >/dev/null 2>&1
     
-    # LISTA DE RESPALDOS SEGURA: Incluye GitLab que nunca es bloqueado
-    MIRRORS=(
-        "https://gitlab.com/rudi9999/ADMRufu/-/raw/main/Plugins/hcr-server"
-        "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Plugins/hcr-server"
-        "https://raw.githubusercontent.com/ChumoGH/ScriptCGH/main/modulos/hcr-server"
-        "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
-    )
-    
-    DESCARGA_EXITOSA=0
-    for url in "${MIRRORS[@]}"; do
-        echo -e "► Probando fuente: ${url:8:25}..."
-        curl -4 -sL --connect-timeout 10 "$url" -o /etc/hcr/hcr-server
+    # Creamos el servidor proxy en Python
+    cat << 'EOF_PY' > /etc/hcr/hcr_nativo.py
+import socket, threading, sys
+
+PUERTO_INJ = int(sys.argv[1])
+PUERTO_DEST = int(sys.argv[2])
+
+def manejar_cliente(client_socket):
+    try:
+        client_socket.recv(1024)
+        client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
         
-        # EL VERIFICADOR REAL: Cuenta los bytes en vez de usar filtros defectuosos
-        TAMANO=$(wc -c < /etc/hcr/hcr-server 2>/dev/null || echo 0)
-        echo -e "   -> Tamaño obtenido: $TAMANO bytes"
+        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        remote_socket.connect(('127.0.0.1', PUERTO_DEST))
         
-        if [ "$TAMANO" -gt 500000 ]; then
-            echo -e "${V}¡Binario pesado y real descargado correctamente!${N}"
-            DESCARGA_EXITOSA=1
-            break
-        fi
-        rm -f /etc/hcr/hcr-server
-    done
-    
-    if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
-        echo -e "\n${R}[!] ERROR CRÍTICO DE RED [!]${N}"
-        echo -e "${A}Ningún servidor entregó un archivo válido.${N}"
-        rm -f /etc/hcr/hcr-server
-        read -p " ► Enter para regresar..."
-        return
-    fi
-    
-    chmod 777 /etc/hcr/hcr-server
-    
-    # ARRANQUE CORREGIDO: Sin el '&' al final para que el motor abra el puerto de verdad
-    cat << 'EOF' > /etc/hcr/start.sh
+        def forward(source, destination):
+            try:
+                while True:
+                    data = source.recv(4096)
+                    if not data: break
+                    destination.sendall(data)
+            except: pass
+            
+        t1 = threading.Thread(target=forward, args=(client_socket, remote_socket))
+        t2 = threading.Thread(target=forward, args=(remote_socket, client_socket))
+        t1.daemon = True
+        t2.daemon = True
+        t1.start()
+        t2.start()
+    except:
+        client_socket.close()
+
+server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+server.bind(('0.0.0.0', PUERTO_INJ))
+server.listen(200)
+
+while True:
+    client, addr = server.accept()
+    threading.Thread(target=manejar_cliente, args=(client,)).start()
+EOF_PY
+
+    chmod +x /etc/hcr/hcr_nativo.py
+
+    # Script de arranque
+    cat << EOF > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
-cd /etc/hcr
-
-if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls || ./hcr-server server -port $P_INJ -tls
-else
-    ./hcr-server -port $P_INJ || ./hcr-server -listen :$P_INJ || ./hcr-server server -port $P_INJ
-fi
+exec /usr/bin/python3 /etc/hcr/hcr_nativo.py \$P_INJ \$P_DEST
 EOF
     chmod +x /etc/hcr/start.sh
 
-    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
+    echo -e "[Unit]\nDescription=HCR Server Nativo Python\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
     
     fuser -k -9 $p_inj/tcp >/dev/null 2>&1
     lsof -ti tcp:$p_inj | xargs kill -9 2>/dev/null
@@ -657,13 +654,13 @@ EOF
     
     sleep 3
     if ss -tlnp | grep -qw "$p_inj"; then
-        echo -e "\n${V}¡ÉXITO! El motor encendió y el puerto $p_inj está verificado como ABIERTO.${N}"
+        echo -e "\n${V}¡ÉXITO! El motor nativo encendió y el puerto $p_inj está verificado como ABIERTO.${N}"
     else
-        echo -e "\n${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.${N}"
+        echo -e "\n${R}El motor falló. Usa la Opción 7 para ver el log.${N}"
     fi
     read -p " ► Enter para continuar..."
 }
-# --------- FIN MODULO HCR SERVER ---------
+# --------- FIN MÓDULO HCR PYTHON ---------
 
 menu_protocolos() {
 while true; do
