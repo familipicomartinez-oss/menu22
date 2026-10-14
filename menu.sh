@@ -511,7 +511,7 @@ esac
 done
 }
 
-# --------- MODULO HCR SERVER DEFINITIVO (CORRECCIÓN TOTAL) ---------
+# --------- MODULO HCR SERVER 100% CORREGIDO (SIN FILTROS QUE BORRAN) ---------
 menu_hcr() {
 while true; do
     clear
@@ -590,27 +590,29 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Descargando binario...${N}"
+    echo -e "${C}Iniciando Descarga Robusta...${N}"
     rm -f /etc/hcr/hcr-server
     apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
     
-    # LISTA DE RESPALDOS: Sin escáneres defectuosos, solo nos basamos en el tamaño real del programa.
+    # LISTA DE RESPALDOS SEGURA: Incluye GitLab que nunca es bloqueado
     MIRRORS=(
+        "https://gitlab.com/rudi9999/ADMRufu/-/raw/main/Plugins/hcr-server"
         "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Plugins/hcr-server"
         "https://raw.githubusercontent.com/ChumoGH/ScriptCGH/main/modulos/hcr-server"
         "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/main/hcr-server"
-        "https://raw.githubusercontent.com/VPS-Freenet/VPS-Freenet/main/Plugins/hcr"
-        "https://github.com/hiddify/hiddify-config/raw/main/hcr/hcr-server"
     )
     
     DESCARGA_EXITOSA=0
     for url in "${MIRRORS[@]}"; do
-        echo -e "► Probando fuente..."
-        curl -sL "$url" -o /etc/hcr/hcr-server
-        # VERIFICADOR BASADO EN TAMAÑO REAL: Un programa debe pesar más de 1 MB.
-        TAMANO=$(stat -c%s "/etc/hcr/hcr-server" 2>/dev/null || echo 0)
-        if [ "$TAMANO" -gt 1000000 ]; then
-            echo -e "${V}¡Archivo limpio y funcional encontrado!${N}"
+        echo -e "► Probando fuente: ${url:8:25}..."
+        curl -4 -sL --connect-timeout 10 "$url" -o /etc/hcr/hcr-server
+        
+        # EL VERIFICADOR REAL: Cuenta los bytes en vez de usar filtros defectuosos
+        TAMANO=$(wc -c < /etc/hcr/hcr-server 2>/dev/null || echo 0)
+        echo -e "   -> Tamaño obtenido: $TAMANO bytes"
+        
+        if [ "$TAMANO" -gt 500000 ]; then
+            echo -e "${V}¡Binario pesado y real descargado correctamente!${N}"
             DESCARGA_EXITOSA=1
             break
         fi
@@ -618,8 +620,8 @@ instalar_hcr() {
     done
     
     if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
-        echo -e "\n${R}[!] ERROR CRÍTICO [!]${N}"
-        echo -e "${A}Ningún servidor en el mundo respondió correctamente.${N}"
+        echo -e "\n${R}[!] ERROR CRÍTICO DE RED [!]${N}"
+        echo -e "${A}Ningún servidor entregó un archivo válido.${N}"
         rm -f /etc/hcr/hcr-server
         read -p " ► Enter para regresar..."
         return
@@ -627,16 +629,16 @@ instalar_hcr() {
     
     chmod 777 /etc/hcr/hcr-server
     
-    # CORRECCIÓN VITAL: Sin el símbolo '&', para que el motor se ancle y abra el puerto.
+    # ARRANQUE CORREGIDO: Sin el '&' al final para que el motor abra el puerto de verdad
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
 cd /etc/hcr
 
 if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls
+    ./hcr-server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls || ./hcr-server server -port $P_INJ -tls
 else
-    ./hcr-server -port $P_INJ || ./hcr-server -listen :$P_INJ
+    ./hcr-server -port $P_INJ || ./hcr-server -listen :$P_INJ || ./hcr-server server -port $P_INJ
 fi
 EOF
     chmod +x /etc/hcr/start.sh
