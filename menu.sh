@@ -506,7 +506,7 @@ esac
 done
 }
 
-# --------- MÓDULO HCR PROXY NATIVO DE PYTHON ---------
+# --------- MÓDULO HCR SERVER ORIGINAL (RAMA MASTER CORRECTA) ---------
 menu_hcr() {
 while true; do
     clear
@@ -526,7 +526,7 @@ while true; do
     echo -e " ${V}[1]${N} ⚙️ Puerto Inyección [$P_INJ]  ${V}[2]${N} ⚙️ Puerto Destino [$P_DEST]"
     echo -e " ${V}[3]${N} 🛡️ Modo             [$MODO] "
     echo -e " ${A}[5]${N} 🟢 Iniciar / Configurar      ${R}[6]${N} 🗑️ Desinstalar HCR"
-    echo -e " ${C}[7]${N} 👁️ Ver Errores del Servidor (Log)"
+    echo -e " ${C}[7]${N} 👁️ Ver Errores del Servidor (Log Real)"
     echo -e " ${C}[0]${N} ↩️ REGRESAR"
     echo -e "${C}================================================${N}"
     read -p " ► Opcion : " op_hcr
@@ -585,62 +585,57 @@ instalar_hcr() {
     
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e "${C}Configurando Proxy Python Nativo...${N}"
-    apt-get install python3 lsof coreutils iptables -y >/dev/null 2>&1
+    echo -e "${C}Descargando Binario HCR Original...${N}"
+    rm -f /etc/hcr/hcr-server
+    apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
     
-    # Creamos el servidor proxy en Python
-    cat << 'EOF_PY' > /etc/hcr/hcr_nativo.py
-import socket, threading, sys
-
-PUERTO_INJ = int(sys.argv[1])
-PUERTO_DEST = int(sys.argv[2])
-
-def manejar_cliente(client_socket):
-    try:
-        client_socket.recv(1024)
-        client_socket.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+    # ENLACES CORREGIDOS A LA RAMA 'master'
+    MIRRORS=(
+        "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/master/hcr-server"
+        "https://github.com/lacasitamx/SCRIPTMOD-LACASITA/raw/HEAD/hcr-server"
+        "https://raw.githubusercontent.com/ChumoGH/ScriptCGH/master/modulos/hcr-server"
+        "https://raw.githubusercontent.com/rudi9999/ADMRufu/master/Plugins/hcr-server"
+    )
+    
+    DESCARGA_EXITOSA=0
+    for url in "${MIRRORS[@]}"; do
+        echo -e "► Probando fuente: ${url:8:35}..."
+        curl -4 -sL --connect-timeout 10 "$url" -o /etc/hcr/hcr-server
         
-        remote_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        remote_socket.connect(('127.0.0.1', PUERTO_DEST))
+        TAMANO=$(wc -c < /etc/hcr/hcr-server 2>/dev/null || echo 0)
+        echo -e "   -> Tamaño obtenido: $TAMANO bytes"
         
-        def forward(source, destination):
-            try:
-                while True:
-                    data = source.recv(4096)
-                    if not data: break
-                    destination.sendall(data)
-            except: pass
-            
-        t1 = threading.Thread(target=forward, args=(client_socket, remote_socket))
-        t2 = threading.Thread(target=forward, args=(remote_socket, client_socket))
-        t1.daemon = True
-        t2.daemon = True
-        t1.start()
-        t2.start()
-    except:
-        client_socket.close()
+        if [ "$TAMANO" -gt 1000000 ]; then
+            echo -e "${V}¡Archivo binario original descargado correctamente!${N}"
+            DESCARGA_EXITOSA=1
+            break
+        fi
+        rm -f /etc/hcr/hcr-server
+    done
+    
+    if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
+        echo -e "\n${R}[!] ERROR CRÍTICO DE RED [!]${N}"
+        echo -e "${A}Ningún servidor entregó el archivo válido.${N}"
+        read -p " ► Enter para regresar..."
+        return
+    fi
+    
+    chmod 777 /etc/hcr/hcr-server
 
-server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-server.bind(('0.0.0.0', PUERTO_INJ))
-server.listen(200)
-
-while True:
-    client, addr = server.accept()
-    threading.Thread(target=manejar_cliente, args=(client,)).start()
-EOF_PY
-
-    chmod +x /etc/hcr/hcr_nativo.py
-
-    # Script de arranque
-    cat << EOF > /etc/hcr/start.sh
+    cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
-exec /usr/bin/python3 /etc/hcr/hcr_nativo.py \$P_INJ \$P_DEST
+cd /etc/hcr
+
+if [ "$MODO" == "TLS" ]; then
+    ./hcr-server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls || ./hcr-server server -port $P_INJ -tls
+else
+    ./hcr-server -port $P_INJ || ./hcr-server -listen :$P_INJ || ./hcr-server server -port $P_INJ
+fi
 EOF
     chmod +x /etc/hcr/start.sh
 
-    echo -e "[Unit]\nDescription=HCR Server Nativo Python\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
+    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
     
     fuser -k -9 $p_inj/tcp >/dev/null 2>&1
     lsof -ti tcp:$p_inj | xargs kill -9 2>/dev/null
@@ -654,13 +649,13 @@ EOF
     
     sleep 3
     if ss -tlnp | grep -qw "$p_inj"; then
-        echo -e "\n${V}¡ÉXITO! El motor nativo encendió y el puerto $p_inj está verificado como ABIERTO.${N}"
+        echo -e "\n${V}¡ÉXITO! El motor HCR encendió y el puerto $p_inj está verificado como ABIERTO.${N}"
     else
-        echo -e "\n${R}El motor falló. Usa la Opción 7 para ver el log.${N}"
+        echo -e "\n${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.${N}"
     fi
     read -p " ► Enter para continuar..."
 }
-# --------- FIN MÓDULO HCR PYTHON ---------
+# --------- FIN MODULO HCR SERVER ---------
 
 menu_protocolos() {
 while true; do
