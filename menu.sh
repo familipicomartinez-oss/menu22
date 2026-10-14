@@ -506,7 +506,7 @@ esac
 done
 }
 
-# --------- MÓDULO HCR SERVER ORIGINAL (RAMA MASTER CORRECTA) ---------
+# --------- MÓDULO HCR SERVER ORIGINAL (ARREGLO DEL ERROR DE CERTIFICADO TLS) ---------
 menu_hcr() {
 while true; do
     clear
@@ -589,7 +589,6 @@ instalar_hcr() {
     rm -f /etc/hcr/hcr-server
     apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
     
-    # ENLACES CORREGIDOS A LA RAMA 'master'
     MIRRORS=(
         "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/master/hcr-server"
         "https://github.com/lacasitamx/SCRIPTMOD-LACASITA/raw/HEAD/hcr-server"
@@ -622,15 +621,16 @@ instalar_hcr() {
     
     chmod 777 /etc/hcr/hcr-server
 
+    # CORRECCIÓN DE LA ORDEN DE ARRANQUE: Añadido '-transport plain' para evitar que pida certificados
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
 cd /etc/hcr
 
 if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -port $P_INJ -tls || ./hcr-server -listen :$P_INJ -tls || ./hcr-server server -port $P_INJ -tls
+    ./hcr-server -listen :$P_INJ -transport tls -tls-cert /etc/hcr/cert.pem -tls-key /etc/hcr/key.pem || ./hcr-server -port $P_INJ -transport tls -tls-cert /etc/hcr/cert.pem -tls-key /etc/hcr/key.pem
 else
-    ./hcr-server -port $P_INJ || ./hcr-server -listen :$P_INJ || ./hcr-server server -port $P_INJ
+    ./hcr-server -listen :$P_INJ -transport plain || ./hcr-server -port $P_INJ -transport plain
 fi
 EOF
     chmod +x /etc/hcr/start.sh
