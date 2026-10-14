@@ -577,8 +577,10 @@ instalar_hcr() {
     if [ "$op_m" == "2" ]; then
         MODO="TLS"
         echo -e "\n${A}Generando certificado TLS...${N}"
-        apt-get install openssl -y >/dev/null 2>&1
-        openssl req -newkey rsa:2048 -nodes -keyout /etc/hcr/key.pem -x509 -days 3650 -out /etc/hcr/cert.pem -subj "/C=CO/O=Osmaca/CN=hcr" >/dev/null 2>&1
+apt-get install openssl -y >/dev/null 2>&1
+        openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
+        -subj "/C=CO/ST=Santander/L=Sabana/O=Osmaca/CN=MiVPS" \
+        -keyout /etc/hcr/hcr.key -out /etc/hcr/hcr.crt > /dev/null 2>&1
     else
         MODO="Plain"
     fi
@@ -590,11 +592,8 @@ instalar_hcr() {
     apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
     
     MIRRORS=(
-        "https://raw.githubusercontent.com/lacasitamx/SCRIPTMOD-LACASITA/master/hcr-server"
-        "https://github.com/lacasitamx/SCRIPTMOD-LACASITA/raw/HEAD/hcr-server"
-        "https://raw.githubusercontent.com/ChumoGH/ScriptCGH/master/modulos/hcr-server"
-        "https://raw.githubusercontent.com/rudi9999/ADMRufu/master/Plugins/hcr-server"
-    )
+    "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/hcr-server"
+)
     
     DESCARGA_EXITOSA=0
     for url in "${MIRRORS[@]}"; do
