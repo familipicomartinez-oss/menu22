@@ -654,30 +654,49 @@ EOF
 }
 
 # ==========================================
-# FUNCIÓN NUEVA: CONFIGURAR BANNER (CON DRAGÓN)
+# FUNCIÓN NUEVA: CONFIGURAR BANNER INTERACTIVO
 # ==========================================
 configurar_banner() {
     clear
     echo -e "${C}================================================${N}"
-    echo -e "       ${A}CONFIGURAR BANNER DE HTTP CUSTOM${N}"
+    echo -e "       ${A}CONFIGURAR BANNER DE LA APLICACIÓN${N}"
     echo -e "${C}================================================${N}"
-    echo -e "${V}Instalando el banner del dragón...${N}"
+    echo -e "${V}Escribe el mensaje principal para tus clientes:${N}"
+    echo -e "${A}(Ej: SERVIDOR PREMIUM, PROHIBIDO TORRENT, etc.)${N}"
+    echo ""
+    read -p " ► Mensaje: " texto_banner
     
+    if [ -z "$texto_banner" ]; then
+        texto_banner="🚀 SERVIDOR PREMIUM OSMACA 🚀"
+    fi
+
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "       ${A}ELIGE EL COLOR DE TU MENSAJE${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " [1] Azul       [5] Gris"
+    echo -e " [2] Amarillo   [6] Anaranjado"
+    echo -e " [3] Verde      [7] Fucsia"
+    echo -e " [4] Rojo       [8] Negro"
+    echo -e "${C}================================================${N}"
+    read -p " ► Opcion (1-8): " op_color
+
+    case $op_color in
+        1) c_html="blue" ;;
+        2) c_html="yellow" ;;
+        3) c_html="green" ;;
+        4) c_html="red" ;;
+        5) c_html="gray" ;;
+        6) c_html="orange" ;;
+        7) c_html="magenta" ;; # Magenta funciona como Fucsia en HTML
+        8) c_html="black" ;;
+        *) c_html="white" ;;
+    esac
+
     cat <<EOF > /etc/issue.net
-<font color="red"><b>           \||/           </b></font><br>
-<font color="red"><b>           |  @___oo      </b></font><br>
-<font color="red"><b> /\  /\   / (__,,,,|      </b></font><br>
-<font color="red"><b>) /^\) ^\/ _)             </b></font><br>
-<font color="red"><b>)   /^\/   _)             </b></font><br>
-<font color="red"><b>)   _ /  / _)             </b></font><br>
-<font color="red"><b>/\  )/\/ ||  |            </b></font><br>
-<font color="green"><b>======================================</b></font><br>
-<font color="yellow"><b>       🐉 PREMIUM OSMACA 🐉     </b></font><br>
-<font color="green"><b>======================================</b></font><br>
-<font color="white"><b>► Prohibido SPAM, Torrent y Fraude.</b></font><br>
-<font color="white"><b>► Conexión 100% Segura y Privada.</b></font><br>
-<font color="white"><b>► Soporte Oficial Activo.</b></font><br>
-<font color="green"><b>======================================</b></font><br>
+<font color="$c_html"><b>======================================</b></font><br>
+<font color="$c_html"><b>      $texto_banner   </b></font><br>
+<font color="$c_html"><b>======================================</b></font><br>
 EOF
 
     sed -i 's/#Banner none/Banner \/etc\/issue.net/g' /etc/ssh/sshd_config
@@ -688,8 +707,8 @@ EOF
     systemctl restart sshd > /dev/null 2>&1
 
     echo ""
-    echo -e "${V}¡Banner del dragón configurado con éxito!${N}"
-    echo -e "${A}Ahora la app renderizará la figura al conectar.${N}"
+    echo -e "${V}¡Banner configurado con éxito!${N}"
+    echo -e "${A}Ahora se mostrará tu mensaje en color en la app.${N}"
     echo ""
     read -p " ► Presiona Enter para regresar al menú..."
 }
@@ -755,7 +774,7 @@ echo -e " ${V}[02]${N} ⇨ [!] OPTIMIZAR VPS      [${R}OFF${N}]"
 echo -e " ${V}[03]${N} ⇨ CONTADOR ONLINE USERS  [${R}OFF${N}]"
 echo -e " ${V}[04]${N} ⇨ AUTOINICIAR SCRIPT     [${R}OFF${N}]"
 echo -e " ${V}[05]${N} ⇨ INSTALADOR DE PROTOCOLOS"
-echo -e " ${V}[06]${N} ⇨ CONFIGURAR BANNER (MENSAJE DRAGÓN)"
+echo -e " ${V}[06]${N} ⇨ 📝 CONFIGURAR BANNER (MENSAJE)"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 echo -e " ${V}[07]${N} ⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ⇨ [ SALIR ]"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
