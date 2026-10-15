@@ -15,7 +15,7 @@ FECHA_ACT=$(date +'%d/%m/%Y-%H:%M')
 STR_PORTS=""
 C_PORT=0
 agregar_puerto() {
-STR_PORTS+="$1       "
+STR_PORTS+="$1        "
 C_PORT=$((C_PORT+1))
 if [ $C_PORT -eq 2 ]; then
 STR_PORTS+="\n "
@@ -656,6 +656,40 @@ EOF
 }
 # --------- FIN MODULO HCR SERVER ---------
 
+# ==========================================
+# FUNCIÓN NUEVA: CONFIGURAR BANNER (MENSAJE SSH)
+# ==========================================
+configurar_banner() {
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "       ${A}CONFIGURAR BANNER DE HTTP CUSTOM${N}"
+    echo -e "${C}================================================${N}"
+    echo -e "${V}Instalando el mensaje de bienvenida...${N}"
+    
+    cat <<EOF > /etc/issue.net
+<font color="green"><b>======================================</b></font><br>
+<font color="red"><b>      🚀 SERVIDOR PREMIUM OSMACA 🚀   </b></font><br>
+<font color="green"><b>======================================</b></font><br>
+<font color="white"><b>► Prohibido SPAM, Torrent y Fraude.</b></font><br>
+<font color="white"><b>► Conexión 100% Segura y Privada.</b></font><br>
+<font color="white"><b>► Soporte Oficial Activo.</b></font><br>
+<font color="green"><b>======================================</b></font><br>
+EOF
+
+    sed -i 's/#Banner none/Banner \/etc\/issue.net/g' /etc/ssh/sshd_config
+    sed -i 's/#Banner/Banner/g' /etc/ssh/sshd_config
+    sed -i '/^Banner /c\Banner \/etc\/issue.net' /etc/ssh/sshd_config
+
+    systemctl restart ssh > /dev/null 2>&1
+    systemctl restart sshd > /dev/null 2>&1
+
+    echo ""
+    echo -e "${V}¡Banner configurado con éxito!${N}"
+    echo -e "${A}Ahora aparecerá en la app al conectar.${N}"
+    echo ""
+    read -p " ► Presiona Enter para regresar al menú..."
+}
+
 menu_protocolos() {
 while true; do
 clear
@@ -666,15 +700,15 @@ PHCR=$(es hcr-server)
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script Osmaca ) 🍄${N}"
 echo -e "--------------------------------------------------------"
 echo -e " ${C}[1]${N} OpenSSH       $P22    ${C}[11]${N} PSIPHON SERVER ${R}[OFF]${N}"
-echo -e " ${C}[2]${N} DROPBEAR      ${R}[OFF]${N}    ${C}[12]${N} TCP DNS        ${A}(#BETA)${N}"
-echo -e " ${C}[3]${N} OPENVPN       ${R}[OFF]${N}    ${C}[13]${N} WEBMIN         ${R}[OFF]${N}"
+echo -e " ${C}[2]${N} DROPBEAR      ${R}[OFF]${N}   ${C}[12]${N} TCP DNS        ${A}(#BETA)${N}"
+echo -e " ${C}[3]${N} OPENVPN       ${R}[OFF]${N}   ${C}[13]${N} WEBMIN         ${R}[OFF]${N}"
 echo -e " ${C}[4]${N} SSL/TLS       $PSSL    ${C}[14]${N} SLOWDNS        ${R}[OFF]${N}"
-echo -e " ${C}[5]${N} SHADOWSOCKS-R ${R}[OFF]${N}    ${C}[15]${N} SSL->PYTHON    ${R}[OFF]${N}"
-echo -e " ${C}[6]${N} SQUID         ${R}[OFF]${N}    ${C}[16]${N} SSLH MULTIPLEX ${R}[OFF]${N}"
+echo -e " ${C}[5]${N} SHADOWSOCKS-R ${R}[OFF]${N}   ${C}[15]${N} SSL->PYTHON    ${R}[OFF]${N}"
+echo -e " ${C}[6]${N} SQUID         ${R}[OFF]${N}   ${C}[16]${N} SSLH MULTIPLEX ${R}[OFF]${N}"
 echo -e " ${C}[7]${N} PROXY PYTHON  $PPY    ${C}[17]${N} OVER WEBSOCKET ${A}(#BETA)${N}"
 echo -e " ${C}[8]${N} V2RAY MANAGER $PV2    ${C}[18]${N} SOCKS5         ${A}(#BETA)${N}"
-echo -e " ${C}[9]${N} CFA ( CLASH ) ${R}[OFF]${N}    ${C}[19]${N} Protocolos UDP $PUDP"
-echo -e " ${C}[10]${N} TROJAN-GO     ${R}[OFF]${N}    ${C}[20]${N} ${C}FUNCIONES EN DISEÑO!${N}"
+echo -e " ${C}[9]${N} CFA ( CLASH ) ${R}[OFF]${N}   ${C}[19]${N} Protocolos UDP $PUDP"
+echo -e " ${C}[10]${N} TROJAN-GO     ${R}[OFF]${N}   ${C}[20]${N} ${C}FUNCIONES EN DISEÑO!${N}"
 echo -e " "
 echo -e "${A}🍄 INSTALACION DE HERRAMIENTAS Y SERVICIOS 🍄${N}"
 echo -e "--------------------------------------------------------"
@@ -708,6 +742,7 @@ case $op_inst in
 esac
 done
 }
+
 while true; do
 clear
 info_sistema
@@ -716,14 +751,16 @@ echo -e " ${V}[02]${N} ⇨ [!] OPTIMIZAR VPS      [${R}OFF${N}]"
 echo -e " ${V}[03]${N} ⇨ CONTADOR ONLINE USERS  [${R}OFF${N}]"
 echo -e " ${V}[04]${N} ⇨ AUTOINICIAR SCRIPT     [${R}OFF${N}]"
 echo -e " ${V}[05]${N} ⇨ INSTALADOR DE PROTOCOLOS"
+echo -e " ${V}[06]${N} ⇨ CONFIGURAR BANNER (MENSAJE SSH)"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " ${V}[06]${N} ⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ⇨ [ SALIR ]"
+echo -e " ${V}[07]${N} ⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ⇨ [ SALIR ]"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 read -p " ► Opcion : " opcion
 case $opcion in
 1) menu_usuarios ;;
 2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.${N}"; read -p "Enter..." ;;
-3|4|5|6) menu_protocolos ;;
+3|4|5|7) menu_protocolos ;;
+6) configurar_banner ;;
 0) exit 0 ;;
 esac
 done
