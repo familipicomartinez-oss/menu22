@@ -506,7 +506,6 @@ esac
 done
 }
 
-# --------- MÓDULO HCR SERVER ORIGINAL (ARREGLO DEL ERROR DE CERTIFICADO TLS) ---------
 menu_hcr() {
 while true; do
     clear
@@ -620,7 +619,6 @@ apt-get install openssl -y >/dev/null 2>&1
     
     chmod 777 /etc/hcr/hcr-server
 
-    # CORRECCIÓN DE LA ORDEN DE ARRANQUE: Añadido '-transport plain' para evitar que pida certificados
     cat << 'EOF' > /etc/hcr/start.sh
 #!/bin/bash
 source /etc/hcr/config
@@ -654,21 +652,27 @@ EOF
     fi
     read -p " ► Enter para continuar..."
 }
-# --------- FIN MODULO HCR SERVER ---------
 
 # ==========================================
-# FUNCIÓN NUEVA: CONFIGURAR BANNER (MENSAJE SSH)
+# FUNCIÓN NUEVA: CONFIGURAR BANNER (CON DRAGÓN)
 # ==========================================
 configurar_banner() {
     clear
     echo -e "${C}================================================${N}"
     echo -e "       ${A}CONFIGURAR BANNER DE HTTP CUSTOM${N}"
     echo -e "${C}================================================${N}"
-    echo -e "${V}Instalando el mensaje de bienvenida...${N}"
+    echo -e "${V}Instalando el banner del dragón...${N}"
     
     cat <<EOF > /etc/issue.net
+<font color="red"><b>           \||/           </b></font><br>
+<font color="red"><b>           |  @___oo      </b></font><br>
+<font color="red"><b> /\  /\   / (__,,,,|      </b></font><br>
+<font color="red"><b>) /^\) ^\/ _)             </b></font><br>
+<font color="red"><b>)   /^\/   _)             </b></font><br>
+<font color="red"><b>)   _ /  / _)             </b></font><br>
+<font color="red"><b>/\  )/\/ ||  |            </b></font><br>
 <font color="green"><b>======================================</b></font><br>
-<font color="red"><b>      🚀 SERVIDOR PREMIUM OSMACA 🚀   </b></font><br>
+<font color="yellow"><b>       🐉 PREMIUM OSMACA 🐉     </b></font><br>
 <font color="green"><b>======================================</b></font><br>
 <font color="white"><b>► Prohibido SPAM, Torrent y Fraude.</b></font><br>
 <font color="white"><b>► Conexión 100% Segura y Privada.</b></font><br>
@@ -684,8 +688,8 @@ EOF
     systemctl restart sshd > /dev/null 2>&1
 
     echo ""
-    echo -e "${V}¡Banner configurado con éxito!${N}"
-    echo -e "${A}Ahora aparecerá en la app al conectar.${N}"
+    echo -e "${V}¡Banner del dragón configurado con éxito!${N}"
+    echo -e "${A}Ahora la app renderizará la figura al conectar.${N}"
     echo ""
     read -p " ► Presiona Enter para regresar al menú..."
 }
@@ -751,7 +755,7 @@ echo -e " ${V}[02]${N} ⇨ [!] OPTIMIZAR VPS      [${R}OFF${N}]"
 echo -e " ${V}[03]${N} ⇨ CONTADOR ONLINE USERS  [${R}OFF${N}]"
 echo -e " ${V}[04]${N} ⇨ AUTOINICIAR SCRIPT     [${R}OFF${N}]"
 echo -e " ${V}[05]${N} ⇨ INSTALADOR DE PROTOCOLOS"
-echo -e " ${V}[06]${N} ⇨ CONFIGURAR BANNER (MENSAJE SSH)"
+echo -e " ${V}[06]${N} ⇨ CONFIGURAR BANNER (MENSAJE DRAGÓN)"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 echo -e " ${V}[07]${N} ⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ⇨ [ SALIR ]"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
