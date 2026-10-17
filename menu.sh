@@ -76,6 +76,53 @@ echo -e " ${W}🔹 U/RAM:${N} ${M}${PORCENT_RAM}%${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 }
 
+# ==========================================
+# MOTOR DE VERIFICACIÓN ONLINE
+# ==========================================
+ver_usuarios_online() {
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "       ${A}📡 MONITOREO DE USUARIOS ONLINE 📡${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " ${W}Escanenado conexiones en tiempo real...${N}"
+    echo -e "${C}────────────────────────────────────────────────────────${N}"
+    
+    # Obtener lista de usuarios reales del sistema
+    USERS=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' /etc/passwd)
+    
+    if [ -z "$USERS" ]; then
+        echo -e " ${R}No hay usuarios creados en el sistema.${N}"
+    else
+        for user in $USERS; do
+            # Verificar si tiene un proceso SSH activo
+            if ps -u "$user" 2>/dev/null | grep -q sshd; then
+                # Usuario ONLINE: Extraer la hora de inicio de sesión y la IP
+                INFO_CON=$(who | grep "^$user " | head -n 1)
+                if [ -n "$INFO_CON" ]; then
+                    HORA=$(echo "$INFO_CON" | awk '{print $4}')
+                    IP_CLI=$(echo "$INFO_CON" | awk '{print $5}' | tr -d '()')
+                else
+                    HORA="Activo"
+                    IP_CLI="Oculta"
+                fi
+                echo -e " 👤 ${W}$user${N} -> ${V}[ ONLINE ]${N} ${W}(Desde: $HORA | IP: $IP_CLI)${N}"
+            else
+                # Usuario OFFLINE: Buscar la última vez que se conectó en los registros
+                ULTIMA=$(last -n 1 "$user" | head -n 1)
+                if [[ "$ULTIMA" == *"wtmp begins"* ]] || [[ -z "$ULTIMA" ]]; then
+                    echo -e " 👤 ${W}$user${N} -> ${R}[ OFFLINE ]${N} ${W}(Nunca se ha conectado)${N}"
+                else
+                    # Extraer el día y la hora del registro
+                    FECHA_OFF=$(echo "$ULTIMA" | awk '{print $4, $5, $6}')
+                    echo -e " 👤 ${W}$user${N} -> ${R}[ OFFLINE ]${N} ${W}(Última vez: $FECHA_OFF)${N}"
+                fi
+            fi
+        done
+    fi
+    echo -e "${C}────────────────────────────────────────────────────────${N}"
+    echo -ne " ${W}► Enter para continuar...${N}"; read
+}
+
 menu_usuarios() {
 while true; do
 clear
@@ -86,6 +133,7 @@ echo -e "${C}================================================${N}"
 echo -e " ${C}[1]${N} ${W}➕ CREAR USUARIO SSH${N}"
 echo -e " ${C}[2]${N} ${W}🗑️  ELIMINAR USUARIO${N}"
 echo -e " ${C}[3]${N} ${W}👥 VER LISTADO DE USUARIOS${N}"
+echo -e " ${V}[4]${N} ${W}📡 MONITOREO DE USUARIOS ONLINE${N}"
 echo -e " ${C}[0]${N} ${W}↩️  VOLVER${N}"
 echo -ne " ${W}► Opcion: ${N}"; read op_user
 case $op_user in
@@ -152,6 +200,7 @@ echo -ne " ${W}► Enter para continuar...${N}"; read
 ;;
 2) echo -ne " ${W}Usuario a eliminar: ${N}"; read u; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e "${V}Eliminado.${N}" || echo -e "${R}Error.${N}"; read -p "Enter..." ;;
 3) awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd; read -p "Enter..." ;;
+4) ver_usuarios_online ;;
 0) break ;;
 esac
 done
