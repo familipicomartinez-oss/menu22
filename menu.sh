@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ==========================================
-# CEREBRO DE COLORES EXTENDIDOS 256 (NEÓN PURO)
+# CEREBRO DE COLORES HIGH-INTENSITY (NEÓN PURO ANSI)
 # ==========================================
-# Colores por defecto (Paleta 256: Cyan 51, Verde 46, Amarillo 226, Rojo 196)
-C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
+# Colores por defecto (Paleta ANSI 90: Brillo Máximo sin bug de terminal)
+C='\033[1;96m'; V='\033[1;92m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
 
 # Si el usuario ya eligió un tema antes, el script lo lee y aplica los colores
 if [ -f /etc/zeroday_tema.conf ]; then
@@ -855,16 +855,16 @@ configurar_colores() {
         echo -e "${C}================================================${N}"
         echo -e "       ${A}🎨 CONFIGURADOR DE TEMAS (ALTA INTENSIDAD) 🎨${N}"
         echo -e "${C}================================================${N}"
-        echo -e " ${W}Motor de 256 colores activos. Elige tu estilo.${N}"
+        echo -e " ${W}Motor ANSI High-Intensity activo. Elige tu estilo.${N}"
         echo ""
-        echo -e " ${V}[1]${N} ${W}💎 Diamante Neón       (Cyan 51 y Blanco Puro)${N}"
-        echo -e " ${R}[2]${N} ${W}🔥 Oro Rojo Estallado  (Rojo 196 y Amarillo 226)${N}"
-        echo -e " ${M}[3]${N} ${W}👾 Cyberpunk 2077      (Fucsia 201 y Cyan 51)${N}"
-        echo -e " ${V}[4]${N} ${W}💻 Matrix Radiactivo   (Verde 46 Puro)${N}"
-        echo -e " ${C}[5]${N} ${W}🌊 Océano Eléctrico    (Azul 33 y Cyan 51)${N}"
-        echo -e " ${A}[6]${N} ${W}🌋 Fuego Solar         (Naranja 214 y Rojo 196)${N}"
-        echo -e " ${M}[7]${N} ${W}🌌 Galaxia Profunda    (Morado 93 y Fucsia 201)${N}"
-        echo -e " ${A}[8]${N} ${W}☢️ Tóxico Extremo      (Amarillo 226 y Verde 46)${N}"
+        echo -e " ${V}[1]${N} ${W}💎 Diamante Neón       (Cyan 96 y Blanco Puro)${N}"
+        echo -e " ${R}[2]${N} ${W}🔥 Oro Rojo Estallado  (Rojo 91 y Amarillo 93)${N}"
+        echo -e " ${M}[3]${N} ${W}👾 Cyberpunk 2077      (Fucsia 95 y Cyan 96)${N}"
+        echo -e " ${V}[4]${N} ${W}💻 Matrix Radiactivo   (Verde 92 Puro)${N}"
+        echo -e " ${C}[5]${N} ${W}🌊 Océano Eléctrico    (Azul 94 y Cyan 96)${N}"
+        echo -e " ${A}[6]${N} ${W}🌋 Fuego Solar         (Naranja 93 y Rojo 91)${N}"
+        echo -e " ${M}[7]${N} ${W}🌌 Galaxia Profunda    (Morado 95 y Azul 94)${N}"
+        echo -e " ${A}[8]${N} ${W}☢️ Tóxico Extremo      (Amarillo 93 y Verde 95)${N}"
         echo -e " ${C}[0]${N} ${W}↩️  Regresar al Menú Principal${N}"
         echo -e "${C}================================================${N}"
         echo -ne " ${W}► Elige un tema (1-8): ${N}"; read op_tema
@@ -872,42 +872,42 @@ configurar_colores() {
         case $op_tema in
             1)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
+C='\033[1;96m'; V='\033[1;92m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
 EOF
                 ;;
             2)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;196m'; V='\033[38;5;226m'; A='\033[38;5;214m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;220m'; W='\033[38;5;231m'
+C='\033[1;91m'; V='\033[1;93m'; A='\033[1;91m'; R='\033[0;91m'; N='\033[0m'; M='\033[1;93m'; W='\033[1;97m'
 EOF
                 ;;
             3)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;201m'; V='\033[38;5;51m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;198m'; W='\033[38;5;231m'
+C='\033[1;95m'; V='\033[1;96m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
 EOF
                 ;;
             4)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;46m'; V='\033[38;5;82m'; A='\033[38;5;118m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;48m'; W='\033[38;5;84m'
+C='\033[1;92m'; V='\033[1;92m'; A='\033[1;92m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;92m'; W='\033[1;92m'
 EOF
                 ;;
             5)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;33m'; V='\033[38;5;51m'; A='\033[38;5;39m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;45m'; W='\033[38;5;159m'
+C='\033[1;94m'; V='\033[1;96m'; A='\033[1;94m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;96m'; W='\033[1;96m'
 EOF
                 ;;
             6)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;214m'; V='\033[38;5;196m'; A='\033[38;5;226m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;202m'; W='\033[38;5;231m'
+C='\033[1;93m'; V='\033[1;91m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;91m'; W='\033[1;97m'
 EOF
                 ;;
             7)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;93m'; V='\033[38;5;51m'; A='\033[38;5;141m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
+C='\033[1;95m'; V='\033[1;94m'; A='\033[1;96m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
 EOF
                 ;;
             8)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;226m'; V='\033[38;5;198m'; A='\033[38;5;46m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;214m'; W='\033[38;5;51m'
+C='\033[1;93m'; V='\033[1;95m'; A='\033[1;92m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;93m'; W='\033[1;92m'
 EOF
                 ;;
             0) break ;;
