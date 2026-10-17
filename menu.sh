@@ -7,8 +7,8 @@
 C='\033[1;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
 
 # Si el usuario ya eligió un tema antes, el script lo lee y aplica los colores
-if [ -f /etc/osmaca_tema.conf ]; then
-    source /etc/osmaca_tema.conf
+if [ -f /etc/zeroday_tema.conf ]; then
+    source /etc/zeroday_tema.conf
 fi
 
 IP_VPS=$(hostname -I | awk '{print $1}'); [ -z "$IP_VPS" ] && IP_VPS="Desconocida"
@@ -60,13 +60,13 @@ if [ -f /etc/hcr/config ]; then
 fi
 
 [ -z "$STR_PORTS" ] && STR_PORTS="🔹 ${R}Sin puertos abiertos actualmente${N}"
-echo -e "${C}=========>>>>> 🌿 Script Osmaca 🌿 <<<<<=========${N}"
+echo -e "${C}=========>>>>> 🌿 Script ZeroDay 🌿 <<<<<=========${N}"
 echo -e "${V}$IP_VPS${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${W}🔹 S.O:${N} ${V}$S_OS${N}  ${W}🔹 Base:${N}${V}$S_ARCH${N}  ${W}🔹 CPU's:${N}${V}$S_CPU${N}"
 echo -e " ${W}🔹 IP: ${N} ${V}$IP_VPS${N}  ${W}🔹 FECHA:${N} ${A}$FECHA_ACT${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${W}Key: ${V}Verified [ Sabana de Torres © ] (V5.7)${N}"
+echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V5.7)${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${M}🟢 PUERTOS ACTIVOS:${N}"
 echo -e " $STR_PORTS"
@@ -174,7 +174,7 @@ case $op_ssl in
 p1=22
 echo -ne " ${W}► Puerto externo SSL a elegir (Ej: 443, 444): ${N}"; read p2; p2=${p2:-443}
 apt-get install stunnel4 openssl -y >/dev/null 2>&1
-openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=Sabana/O=VPN/C=CO" >/dev/null 2>&1
+openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=ZeroDay/O=VPN/C=CO" >/dev/null 2>&1
 echo -e "pid = /var/run/stunnel4.pid\ncert = /etc/stunnel/stunnel.pem\nclient = no\nsocket = a:SO_REUSEADDR=1\nsocket = l:TCP_NODELAY=1\nsocket = r:TCP_NODELAY=1\n[stunnel-custom]\naccept = $p2\nconnect = 127.0.0.1:$p1" > /etc/stunnel/stunnel.conf
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
 ufw allow $p2/tcp >/dev/null 2>&1
@@ -382,7 +382,7 @@ case $op_v2 in
     sleep 2
     
     mkdir -p /usr/local/etc/xray
-    openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=Sabana/O=Osmaca/CN=$dom_v2" >/dev/null 2>&1
+    openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=$dom_v2" >/dev/null 2>&1
     chmod 644 /usr/local/etc/xray/private.key /usr/local/etc/xray/cert.crt
     
     cat <<EOF > /usr/local/etc/xray/config.json
@@ -406,7 +406,7 @@ case $op_v2 in
           }
         ]
       },
-      "wsSettings": { "path": "/osmaca" }
+      "wsSettings": { "path": "/zeroday" }
     }
   }],
   "outbounds": [{ "protocol": "freedom", "settings": {} }]
@@ -477,7 +477,7 @@ EOF
     cat <<EOF > /tmp/vmess.json
 {
   "v": "2",
-  "ps": "Osmaca-V2Ray",
+  "ps": "ZeroDay-V2Ray",
   "add": "$dom_v2",
   "port": "$pt_v2",
   "id": "$UUID",
@@ -486,7 +486,7 @@ EOF
   "net": "ws",
   "type": "none",
   "host": "$dom_v2",
-  "path": "/osmaca",
+  "path": "/zeroday",
   "tls": "tls",
   "sni": "$dom_v2",
   "alpn": ""
@@ -501,7 +501,7 @@ EOF
     echo -e " ${W}🔹 Puerto         :${N} ${V}$pt_v2${N}"
     echo -e " ${W}🔹 UUID           :${N} ${A}$UUID${N}"
     echo -e " ${W}🔹 Protocolo      : WebSocket (WS)${N}"
-    echo -e " ${W}🔹 Path           : /osmaca${N}"
+    echo -e " ${W}🔹 Path           : /zeroday${N}"
     echo -e " ${W}🔹 Seguridad      : TLS (Activada)${N}"
     echo -e "${C}================================================${N}"
     echo -e " 🔗 ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):${N}\n"
@@ -591,7 +591,7 @@ instalar_hcr() {
         echo -e "\n${A}Generando certificado TLS...${N}"
 apt-get install openssl -y >/dev/null 2>&1
         openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
-        -subj "/C=CO/ST=Santander/L=Sabana/O=Osmaca/CN=MiVPS" \
+        -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=MiVPS" \
         -keyout /etc/hcr/hcr.key -out /etc/hcr/hcr.crt > /dev/null 2>&1
     else
         MODO="Plain"
@@ -677,7 +677,7 @@ configurar_banner() {
     echo -ne " ${W}► Mensaje: ${N}"; read texto_banner
     
     if [ -z "$texto_banner" ]; then
-        texto_banner="🚀 SERVIDOR PREMIUM OSMACA 🚀"
+        texto_banner="🚀 SERVIDOR PREMIUM ZERODAY 🚀"
     fi
 
     clear
@@ -746,50 +746,42 @@ configurar_colores() {
 
         case $op_tema in
             1)
-                # Cyan(C), Verde(V), Amarillo(A), Rojo(R), Magenta(M), Blanco Puro(W)
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
 EOF
                 ;;
             2)
-                # Rojo(C), Amarillo(V), Rojo Claro(A), Rojo Base(R), Amarillo Oscuro(M), Blanco Puro(W)
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;31m'; V='\033[1;33m'; A='\033[1;31m'; R='\033[0;31m'; N='\033[0m'; M='\033[1;33m'; W='\033[1;37m'
 EOF
                 ;;
             3)
-                # Magenta(C), Cyan(V), Amarillo(A), Rojo(R), Magenta(M), Blanco Puro(W)
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;35m'; V='\033[1;36m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
 EOF
                 ;;
             4)
-                # Puro Verde en distintas tonalidades, letras incluidas
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;32m'; V='\033[1;32m'; A='\033[1;32m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;32m'; W='\033[1;32m'
 EOF
                 ;;
             5)
-                # Azules y Cyan, letras Cyan
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;34m'; V='\033[1;36m'; A='\033[1;34m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;36m'; W='\033[1;36m'
 EOF
                 ;;
             6)
-                # Amarillos, Naranjas y Rojos. Letras Blancas
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;33m'; V='\033[1;31m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;31m'; W='\033[1;37m'
 EOF
                 ;;
             7)
-                # Morados y Azules. Letras Blancas
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;35m'; V='\033[1;34m'; A='\033[1;36m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
 EOF
                 ;;
             8)
-                # Alto contraste. Letras Verdes
-                cat << 'EOF' > /etc/osmaca_tema.conf
+                cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[1;33m'; V='\033[1;35m'; A='\033[1;32m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;33m'; W='\033[1;32m'
 EOF
                 ;;
@@ -798,7 +790,7 @@ EOF
         esac
         
         # Recargar configuración inmediatamente
-        source /etc/osmaca_tema.conf
+        source /etc/zeroday_tema.conf
         echo -e "\n ${V}¡Tema visual vibrante aplicado con éxito!${N}"
         sleep 1
     done
@@ -811,7 +803,7 @@ P22=$(ep 22); P80=$(es proxypy); PSSL=$(es stunnel4); PPY=$(es proxypy); PUDP=$(
 PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PHCR=$(es hcr-server)
-echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script Osmaca ) 🍄${N}"
+echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script ZeroDay ) 🍄${N}"
 echo -e "${C}--------------------------------------------------------${N}"
 echo -e " ${C}[1]${N} ${W}OpenSSH       ${N}$P22    ${C}[11]${N} ${W}PSIPHON SERVER ${R}[OFF]${N}"
 echo -e " ${C}[2]${N} ${W}DROPBEAR      ${R}[OFF]${N}   ${C}[12]${N} ${W}TCP DNS        ${A}(#BETA)${N}"
