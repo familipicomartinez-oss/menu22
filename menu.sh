@@ -1,12 +1,12 @@
 #!/bin/bash
 
 # ==========================================
-# CEREBRO DE COLORES (CARGA AUTOMÁTICA)
+# CEREBRO DE COLORES VIBRANTES (CARGA AUTOMÁTICA)
 # ==========================================
-# Colores por defecto
-C='\033[0;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'
+# Colores por defecto (Ahora todos en alta intensidad / Brillantes)
+C='\033[1;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
 
-# Si el usuario ya eligió un tema antes, el script lo lee y lo aplica "de verdad"
+# Si el usuario ya eligió un tema antes, el script lo lee y aplica los colores
 if [ -f /etc/osmaca_tema.conf ]; then
     source /etc/osmaca_tema.conf
 fi
@@ -27,7 +27,7 @@ FECHA_ACT=$(date +'%d/%m/%Y-%H:%M')
 STR_PORTS=""
 C_PORT=0
 agregar_puerto() {
-STR_PORTS+="$1        "
+STR_PORTS+="${W}$1        ${N}"
 C_PORT=$((C_PORT+1))
 if [ $C_PORT -eq 2 ]; then
 STR_PORTS+="\n "
@@ -62,18 +62,18 @@ fi
 [ -z "$STR_PORTS" ] && STR_PORTS="🔹 ${R}Sin puertos abiertos actualmente${N}"
 echo -e "${C}=========>>>>> 🌿 Script Osmaca 🌿 <<<<<=========${N}"
 echo -e "${V}$IP_VPS${N}"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " 🔹 S.O: ${C}$S_OS${N}  🔹 Base:${C}$S_ARCH${N}  🔹 CPU's:${C}$S_CPU${N}"
-echo -e " 🔹 IP:  ${V}$IP_VPS${N}  🔹 FECHA: ${A}$FECHA_ACT${N}"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " Key: ${V}Verified [ Sabana de Torres © ] (V5.7)${N}"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -e " ${W}🔹 S.O:${N} ${V}$S_OS${N}  ${W}🔹 Base:${N}${V}$S_ARCH${N}  ${W}🔹 CPU's:${N}${V}$S_CPU${N}"
+echo -e " ${W}🔹 IP: ${N} ${V}$IP_VPS${N}  ${W}🔹 FECHA:${N} ${A}$FECHA_ACT${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -e " ${W}Key: ${V}Verified [ Sabana de Torres © ] (V5.7)${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${M}🟢 PUERTOS ACTIVOS:${N}"
 echo -e " $STR_PORTS"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " 🔹 TOTAL: ${C}${MEM_TOTAL}M${N} 🔹 M|LIBRE: ${C}${LIBRE_RAM}M${N} 🔹 EN USO: ${C}${MEM_USADA}M${N}"
-echo -e " 🔹 U/RAM: ${A}${PORCENT_RAM}%${N}"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -e " ${W}🔹 TOTAL:${N} ${A}${MEM_TOTAL}M${N} ${W}🔹 M|LIBRE:${N} ${V}${LIBRE_RAM}M${N} ${W}🔹 EN USO:${N} ${R}${MEM_USADA}M${N}"
+echo -e " ${W}🔹 U/RAM:${N} ${M}${PORCENT_RAM}%${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
 }
 
 menu_usuarios() {
@@ -81,23 +81,23 @@ while true; do
 clear
 echo -e "${C}================================================${N}"
 echo -e "       ${A}⚜️  CREADOR DE CUENTAS TIPO ⚜️${N}"
-echo -e "       ${C}MENU DE CREACION DE USUARIOS${N}"
+echo -e "       ${W}MENU DE CREACION DE USUARIOS${N}"
 echo -e "${C}================================================${N}"
-echo -e " [1] ➕ CREAR USUARIO SSH"
-echo -e " [2] 🗑️  ELIMINAR USUARIO"
-echo -e " [3] 👥 VER LISTADO DE USUARIOS"
-echo -e " [0] ↩️  VOLVER"
-read -p " ► Opcion: " op_user
+echo -e " ${C}[1]${N} ${W}➕ CREAR USUARIO SSH${N}"
+echo -e " ${C}[2]${N} ${W}🗑️  ELIMINAR USUARIO${N}"
+echo -e " ${C}[3]${N} ${W}👥 VER LISTADO DE USUARIOS${N}"
+echo -e " ${C}[0]${N} ${W}↩️  VOLVER${N}"
+echo -ne " ${W}► Opcion: ${N}"; read op_user
 case $op_user in
 1)
 clear
 echo -e "${C}================================================${N}"
 echo -e "       ${A}⚜️  CREADOR DE CUENTAS TIPO ⚜️${N}"
 echo -e "${C}================================================${N}"
-read -p " 👤 Nombre de usuario: " u
-read -p " 🔑 Contraseña: " p
-read -p " ⏳ Dias de duración: " d
-read -p " 📈 Límite de conexiones: " l
+echo -ne " ${W}👤 Nombre de usuario: ${N}"; read u
+echo -ne " ${W}🔑 Contraseña: ${N}"; read p
+echo -ne " ${W}⏳ Dias de duración: ${N}"; read d
+echo -ne " ${W}📈 Límite de conexiones: ${N}"; read l
 useradd -m -s /bin/bash "$u" 2>/dev/null
 echo "$u:$p" | chpasswd 2>/dev/null
 chage -E $(date -d "+$d days" +%Y-%m-%d) "$u" 2>/dev/null || true
@@ -125,31 +125,32 @@ echo -e "${V}$(figlet -c -f slant "$u")${N}"
 else
 echo -e "${V}     >>> $u <<<     ${N}"
 fi
-echo -e "${C}* Puertas Activas en su Servidor *${N}"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
+echo -e "${W}* Puertas Activas en su Servidor *${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
 STR_P=""
-ss -tlnp | grep -q ":22 " && STR_P+="🔹 SSH: ${V}22${N}   "
+ss -tlnp | grep -q ":22 " && STR_P+="${W}🔹 SSH: ${V}22${N}   "
 if ss -tlnp | grep -q ":80 "; then
-    systemctl is-active --quiet xray && grep -q '"port": 80' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="🔹 V2RAY: ${V}80${N}   " || STR_P+="🔹 PROXY: ${V}80${N}   "
+    systemctl is-active --quiet xray && grep -q '"port": 80' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="${W}🔹 V2RAY: ${V}80${N}   " || STR_P+="${W}🔹 PROXY: ${V}80${N}   "
 fi
 if ss -tlnp | grep -q ":443 "; then
-    systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="🔹 V2RAY: ${V}443${N}   " || STR_P+="🔹 SSL: ${V}443${N}   "
+    systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="${W}🔹 V2RAY: ${V}443${N}   " || STR_P+="${W}🔹 SSL: ${V}443${N}   "
 fi
-ss -ulnp | grep -q ":36712" && STR_P+="🔹 UDP: ${V}36712${N}   "
-[ -z "$STR_P" ] && STR_P="🔹 ${R}Sin puertos configurados${N}"
+ss -ulnp | grep -q ":36712" && STR_P+="${W}🔹 UDP: ${V}36712${N}   "
+[ -z "$STR_P" ] && STR_P="${W}🔹 ${R}Sin puertos configurados${N}"
 echo -e " $STR_P"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " Host/IP-Address : ${V}$IP_VPS${N}"
-echo -e " USUARIO : ${V}$u${N}"
-echo -e " PASSWD  : ${V}$p${N}"
-echo -e " LIMITE  : ${V}$l${N}"
-echo -e " VALIDEZ : ${V}$(date -d "+$d days" +%d/%m/%Y)${N}"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -e " ${W}Host/IP-Address :${N} ${V}$IP_VPS${N}"
+echo -e " ${W}USUARIO :${N} ${V}$u${N}"
+echo -e " ${W}PASSWD  :${N} ${V}$p${N}"
+echo -e " ${W}LIMITE  :${N} ${V}$l${N}"
+echo -e " ${W}VALIDEZ :${N} ${V}$(date -d "+$d days" +%d/%m/%Y)${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${R}✓ El servidor desconectará automáticamente al${N}"
 echo -e " ${R}  usuario si supera el límite de $l conexiones.${N}"
 echo -e "${C}================================================${N}"
-read -p " ► Enter para continuar..." ;;
-2) read -p " Usuario a eliminar: " u; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e "${V}Eliminado.${N}" || echo -e "${R}Error.${N}"; read -p "Enter..." ;;
+echo -ne " ${W}► Enter para continuar...${N}"; read
+;;
+2) echo -ne " ${W}Usuario a eliminar: ${N}"; read u; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e "${V}Eliminado.${N}" || echo -e "${R}Error.${N}"; read -p "Enter..." ;;
 3) awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd; read -p "Enter..." ;;
 0) break ;;
 esac
@@ -160,18 +161,18 @@ menu_ssl() {
 while true; do
 clear
 echo -e "${A}--- GESTOR DE PROTOCOLO SSL/TLS ---${N}"
-echo -e " Estado: $(es stunnel4)"
-echo -e "----------------------------------------"
-echo -e " ${V}[1]${N} 🟢 Instalar Certificado SSL (Interno 22 -> Externo a elegir)"
-echo -e " ${A}[2]${N} ⏸️  Detener SSL"
-echo -e " ${R}[3]${N} 🗑️  Desinstalar"
-echo -e " ${C}[0]${N} ↩️  Volver"
-echo -e "----------------------------------------"
-read -p " ► Opcion : " op_ssl
+echo -e " ${W}Estado:${N} $(es stunnel4)"
+echo -e "${C}----------------------------------------${N}"
+echo -e " ${V}[1]${N} ${W}🟢 Instalar Certificado SSL (Interno 22 -> Externo a elegir)${N}"
+echo -e " ${A}[2]${N} ${W}⏸️  Detener SSL${N}"
+echo -e " ${R}[3]${N} ${W}🗑️  Desinstalar${N}"
+echo -e " ${C}[0]${N} ${W}↩️  Volver${N}"
+echo -e "${C}----------------------------------------${N}"
+echo -ne " ${W}► Opcion : ${N}"; read op_ssl
 case $op_ssl in
 1)
 p1=22
-read -p " ► Puerto externo SSL a elegir (Ej: 443, 444): " p2; p2=${p2:-443}
+echo -ne " ${W}► Puerto externo SSL a elegir (Ej: 443, 444): ${N}"; read p2; p2=${p2:-443}
 apt-get install stunnel4 openssl -y >/dev/null 2>&1
 openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=Sabana/O=VPN/C=CO" >/dev/null 2>&1
 echo -e "pid = /var/run/stunnel4.pid\ncert = /etc/stunnel/stunnel.pem\nclient = no\nsocket = a:SO_REUSEADDR=1\nsocket = l:TCP_NODELAY=1\nsocket = r:TCP_NODELAY=1\n[stunnel-custom]\naccept = $p2\nconnect = 127.0.0.1:$p1" > /etc/stunnel/stunnel.conf
@@ -191,17 +192,17 @@ menu_py() {
 while true; do
 clear
 echo -e "${A}--- GESTOR DE PROXY PYTHON ---${N}"
-echo -e " Estado: $(es proxypy)"
-echo -e "----------------------------------------"
-echo -e " ${V}[3]${N} 🟢 WebSocket PRO (Elegir Puerto)"
-echo -e " ${A}[4]${N} ⏸️  Detener Proxy"
-echo -e " ${R}[5]${N} 🗑️  Desinstalar"
-echo -e " ${C}[0]${N} ↩️  Volver"
-echo -e "----------------------------------------"
-read -p " ► Opcion : " op_py
+echo -e " ${W}Estado:${N} $(es proxypy)"
+echo -e "${C}----------------------------------------${N}"
+echo -e " ${V}[3]${N} ${W}🟢 WebSocket PRO (Elegir Puerto)${N}"
+echo -e " ${A}[4]${N} ${W}⏸️  Detener Proxy${N}"
+echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar${N}"
+echo -e " ${C}[0]${N} ${W}↩️  Volver${N}"
+echo -e "${C}----------------------------------------${N}"
+echo -ne " ${W}► Opcion : ${N}"; read op_py
 case $op_py in
 3)
-read -p " ► Puerto para el WebSocket (Ej: 80): " pt; pt=${pt:-80}
+echo -ne " ${W}► Puerto para el WebSocket (Ej: 80): ${N}"; read pt; pt=${pt:-80}
 echo -e "${A}Liberando el puerto $pt y preparando Python...${N}"
 systemctl stop apache2 nginx dropbear 2>/dev/null
 fuser -k $pt/tcp 2>/dev/null
@@ -249,17 +250,17 @@ menu_udp() {
 while true; do
 clear
 echo -e "${A}--- UDP CUSTOM ---${N}"
-echo -e " Estado: $(es udp-custom)"
-echo -e "----------------------------------------"
-echo -e " ${V}[1]${N} 🟢 Instalar UDP Custom"
-echo -e " ${A}[2]${N} ⏸️  Detener UDP"
-echo -e " ${R}[3]${N} 🗑️  Desinstalar UDP"
-echo -e " ${C}[0]${N} ↩️  Volver"
-echo -e "----------------------------------------"
-read -p " ► Opcion : " op_udp
+echo -e " ${W}Estado:${N} $(es udp-custom)"
+echo -e "${C}----------------------------------------${N}"
+echo -e " ${V}[1]${N} ${W}🟢 Instalar UDP Custom${N}"
+echo -e " ${A}[2]${N} ${W}⏸️  Detener UDP${N}"
+echo -e " ${R}[3]${N} ${W}🗑️  Desinstalar UDP${N}"
+echo -e " ${C}[0]${N} ${W}↩️  Volver${N}"
+echo -e "${C}----------------------------------------${N}"
+echo -ne " ${W}► Opcion : ${N}"; read op_udp
 case $op_udp in
 1)
-echo "Instalando servidor UDP Custom..."
+echo -e "${W}Instalando servidor UDP Custom...${N}"
 apt-get install -y iptables curl >/dev/null 2>&1
 curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
@@ -283,14 +284,14 @@ clear
 P_BAD72=$(ss -tlnp | grep -q ":7200" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 P_BAD73=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 echo -e "${A}--- BADVPN UDP (VIDEOLLAMADAS) ---${N}"
-echo -e " Estado: 7200 $P_BAD72 | 7300 $P_BAD73"
-echo -e "----------------------------------------"
-echo -e " ${V}[1]${N} 🟢 Instalar / Iniciar BadVPN"
-echo -e " ${A}[2]${N} ⏸️  Detener BadVPN"
-echo -e " ${R}[3]${N} 🗑️  Desinstalar BadVPN"
-echo -e " ${C}[0]${N} ↩️  Volver"
-echo -e "----------------------------------------"
-read -p " ► Opcion : " op_badvpn
+echo -e " ${W}Estado: 7200${N} $P_BAD72 ${W}| 7300${N} $P_BAD73"
+echo -e "${C}----------------------------------------${N}"
+echo -e " ${V}[1]${N} ${W}🟢 Instalar / Iniciar BadVPN${N}"
+echo -e " ${A}[2]${N} ${W}⏸️  Detener BadVPN${N}"
+echo -e " ${R}[3]${N} ${W}🗑️  Desinstalar BadVPN${N}"
+echo -e " ${C}[0]${N} ${W}↩️  Volver${N}"
+echo -e "${C}----------------------------------------${N}"
+echo -ne " ${W}► Opcion : ${N}"; read op_badvpn
 case $op_badvpn in
 1)
 clear
@@ -324,7 +325,7 @@ if [ -f /usr/bin/badvpn-udpgw ]; then
 else
     echo -e "\n${R}ERROR: No se pudo instalar desde el repositorio oficial de Ubuntu.${N}"
 fi
-read -p " ► Enter para continuar..." ;;
+echo -ne " ${W}► Enter para continuar...${N}"; read ;;
 2)
 systemctl stop badvpn7300 2>/dev/null
 systemctl stop badvpn7200 2>/dev/null
@@ -352,16 +353,16 @@ P_V2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${
 echo -e "${C}================================================${N}"
 echo -e "     ${A}⚜️  V2RAY / XRAY MANAGER (WebSocket) ⚜️${N}"
 echo -e "${C}================================================${N}"
-echo -e " Estado actual: $P_V2"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " ${V}[1]${N} 🟢 Instalar V2Ray/Xray (Modo WebSocket)"
-echo -e " ${A}[2]${N} ➕ Generar Nuevo Usuario (UUID)"
-echo -e " ${C}[3]${N} ⚙️  Modificar Puerto de Conexión"
-echo -e " ${V}[4]${N} 👁️  Ver mis Datos y Link de Conexión"
-echo -e " ${R}[5]${N} 🗑️  Desinstalar Todo"
-echo -e " ${C}[0]${N} ↩️  Volver al Menú Principal"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-read -p " ► Opcion : " op_v2
+echo -e " ${W}Estado actual:${N} $P_V2"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -e " ${V}[1]${N} ${W}🟢 Instalar V2Ray/Xray (Modo WebSocket)${N}"
+echo -e " ${A}[2]${N} ${W}➕ Generar Nuevo Usuario (UUID)${N}"
+echo -e " ${C}[3]${N} ${W}⚙️  Modificar Puerto de Conexión${N}"
+echo -e " ${V}[4]${N} ${W}👁️  Ver mis Datos y Link de Conexión${N}"
+echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Todo${N}"
+echo -e " ${C}[0]${N} ${W}↩️  Volver al Menú Principal${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -ne " ${W}► Opcion : ${N}"; read op_v2
 case $op_v2 in
 1)
     clear
@@ -371,8 +372,8 @@ case $op_v2 in
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===${N}"
-    read -p " ► Puerto a usar (Recomendado: 443): " pt_v2; pt_v2=${pt_v2:-443}
-    read -p " ► Tu Dominio del Servidor (Ej: movistar.zex.digital): " dom_v2; dom_v2=${dom_v2:-$IP_VPS}
+    echo -ne " ${W}► Puerto a usar (Recomendado: 443): ${N}"; read pt_v2; pt_v2=${pt_v2:-443}
+    echo -ne " ${W}► Tu Dominio del Servidor (Ej: movistar.zex.digital): ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
     UUID=$(uuidgen)
     
     systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
@@ -425,7 +426,7 @@ EOF
     else
         echo -e "\n${R}ERROR: V2Ray no pudo iniciar.${N}"
     fi
-    read -p " ► Enter para continuar..." ;;
+    echo -ne " ${W}► Enter para continuar...${N}"; read ;;
 2)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e "${R}V2Ray no está instalado. Instálalo primero (Opción 1).${N}"; read -p "Enter..."; continue
@@ -435,16 +436,16 @@ EOF
     echo "$UUID" > /usr/local/etc/xray/uuid.txt
     systemctl restart xray
     echo -e "${V}¡Nuevo UUID generado y configurado exitosamente!${N}"
-    echo -e "Nuevo UUID: $UUID"
-    read -p " ► Enter para continuar..." ;;
+    echo -e "${W}Nuevo UUID:${N} $UUID"
+    echo -ne " ${W}► Enter para continuar...${N}"; read ;;
 3)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e "${R}V2Ray no está instalado. Instálalo primero (Opción 1).${N}"; read -p "Enter..."; continue
     fi
     pt_actual=$(cat /usr/local/etc/xray/puerto.txt)
     echo -e "\n${C}=== MODIFICAR PUERTO V2RAY ===${N}"
-    echo -e " 🔹 Puerto actual: ${V}$pt_actual${N}"
-    read -p " ► Ingresa el NUEVO puerto a usar (Ej: 80, 443): " pt_nuevo
+    echo -e " ${W}🔹 Puerto actual:${N} ${V}$pt_actual${N}"
+    echo -ne " ${W}► Ingresa el NUEVO puerto a usar (Ej: 80, 443): ${N}"; read pt_nuevo
     if [ -z "$pt_nuevo" ]; then
         echo -e "${R}Cancelado.${N}"; read -p "Enter..."; continue
     fi
@@ -464,7 +465,7 @@ EOF
     else
         echo -e "\n${R}ERROR: El puerto $pt_nuevo está bloqueado por el sistema. Intenta con otro.${N}"
     fi
-    read -p " ► Enter para continuar..." ;;
+    echo -ne " ${W}► Enter para continuar...${N}"; read ;;
 4)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e "${R}V2Ray no está instalado.${N}"; read -p "Enter..."; continue
@@ -496,23 +497,23 @@ EOF
     
     clear
     echo -e "${C}=== TUS DATOS DE V2RAY ===${N}"
-    echo -e " 🔹 Dominio Server : ${V}$dom_v2${N}"
-    echo -e " 🔹 Puerto         : ${V}$pt_v2${N}"
-    echo -e " 🔹 UUID           : ${A}$UUID${N}"
-    echo -e " 🔹 Protocolo      : WebSocket (WS)"
-    echo -e " 🔹 Path           : /osmaca"
-    echo -e " 🔹 Seguridad      : TLS (Activada)"
+    echo -e " ${W}🔹 Dominio Server :${N} ${V}$dom_v2${N}"
+    echo -e " ${W}🔹 Puerto         :${N} ${V}$pt_v2${N}"
+    echo -e " ${W}🔹 UUID           :${N} ${A}$UUID${N}"
+    echo -e " ${W}🔹 Protocolo      : WebSocket (WS)${N}"
+    echo -e " ${W}🔹 Path           : /osmaca${N}"
+    echo -e " ${W}🔹 Seguridad      : TLS (Activada)${N}"
     echo -e "${C}================================================${N}"
     echo -e " 🔗 ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):${N}\n"
     echo -e "${A}$VMESS_LINK${N}\n"
-    read -p " ► Enter para continuar..." ;;
+    echo -ne " ${W}► Enter para continuar...${N}"; read ;;
 5)
     systemctl stop xray >/dev/null 2>&1
     systemctl disable xray >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove >/dev/null 2>&1
     rm -rf /usr/local/etc/xray
     echo -e "${R}V2Ray / Xray Desinstalado completamente.${N}"
-    read -p " ► Enter para continuar..." ;;
+    echo -ne " ${W}► Enter para continuar...${N}"; read ;;
 0) break ;;
 esac
 done
@@ -532,19 +533,19 @@ while true; do
     fi
 
     echo -e "${C}================================================${N}"
-    echo -e "       MENU HCR SERVER - Estado: $ESTADO"
+    echo -e "       ${W}MENU HCR SERVER - Estado:${N} $ESTADO"
     echo -e "${C}================================================${N}"
-    echo -e " ${V}[1]${N} ⚙️ Puerto Inyección [$P_INJ]  ${V}[2]${N} ⚙️ Puerto Destino [$P_DEST]"
-    echo -e " ${V}[3]${N} 🛡️ Modo             [$MODO] "
-    echo -e " ${A}[5]${N} 🟢 Iniciar / Configurar      ${R}[6]${N} 🗑️ Desinstalar HCR"
-    echo -e " ${C}[7]${N} 👁️ Ver Errores del Servidor (Log Real)"
-    echo -e " ${C}[0]${N} ↩️ REGRESAR"
+    echo -e " ${V}[1]${N} ${W}⚙️ Puerto Inyección [$P_INJ]${N}  ${V}[2]${N} ${W}⚙️ Puerto Destino [$P_DEST]${N}"
+    echo -e " ${V}[3]${N} ${W}🛡️ Modo             [$MODO]${N} "
+    echo -e " ${A}[5]${N} ${W}🟢 Iniciar / Configurar${N}      ${R}[6]${N} ${W}🗑️ Desinstalar HCR${N}"
+    echo -e " ${C}[7]${N} ${W}👁️ Ver Errores del Servidor (Log Real)${N}"
+    echo -e " ${C}[0]${N} ${W}↩️ REGRESAR${N}"
     echo -e "${C}================================================${N}"
-    read -p " ► Opcion : " op_hcr
+    echo -ne " ${W}► Opcion : ${N}"; read op_hcr
     
     case $op_hcr in
         1|2|3)
-            echo "Para cambiar puertos o modos, usa la Opción 5 de Instalación."
+            echo -e "${W}Para cambiar puertos o modos, usa la Opción 5 de Instalación.${N}"
             sleep 1
             ;;
         5)
@@ -561,7 +562,7 @@ while true; do
             clear
             echo -e "${A}=== LOGS DEL MOTOR HCR ===${N}"
             journalctl -u hcr-server -n 40 --no-pager
-            read -p " ► Enter para regresar..."
+            echo -ne " ${W}► Enter para regresar...${N}"; read
             ;;
         0) break ;;
     esac
@@ -573,16 +574,16 @@ instalar_hcr() {
     echo -e "${A}========= INSTALACION HCR SERVER =========${N}"
     mkdir -p /etc/hcr
     
-    read -p " ► Puerto de Inyección [Default 8080]: " p_inj
+    echo -ne " ${W}► Puerto de Inyección [Default 8080]: ${N}"; read p_inj
     p_inj=${p_inj:-8080}
     
-    read -p " ► Puerto de redireccionamiento [Default 22]: " p_dest
+    echo -ne " ${W}► Puerto de redireccionamiento [Default 22]: ${N}"; read p_dest
     p_dest=${p_dest:-22}
     
-    echo -e "\n Seleccione Modo de transporte:"
-    echo -e " [1] Plain (Recomendado para HTTP Custom clásico)"
-    echo -e " [2] TLS (Con certificado SSL)"
-    read -p " ► Opcion [Default 1]: " op_m
+    echo -e "\n ${W}Seleccione Modo de transporte:${N}"
+    echo -e " ${W}[1] Plain (Recomendado para HTTP Custom clásico)${N}"
+    echo -e " ${W}[2] TLS (Con certificado SSL)${N}"
+    echo -ne " ${W}► Opcion [Default 1]: ${N}"; read op_m
     op_m=${op_m:-1}
     
     if [ "$op_m" == "2" ]; then
@@ -608,11 +609,11 @@ apt-get install openssl -y >/dev/null 2>&1
     
     DESCARGA_EXITOSA=0
     for url in "${MIRRORS[@]}"; do
-        echo -e "► Probando fuente: ${url:8:35}..."
+        echo -e "${W}► Probando fuente: ${url:8:35}...${N}"
         curl -4 -sL --connect-timeout 10 "$url" -o /etc/hcr/hcr-server
         
         TAMANO=$(wc -c < /etc/hcr/hcr-server 2>/dev/null || echo 0)
-        echo -e "   -> Tamaño obtenido: $TAMANO bytes"
+        echo -e "   ${W}-> Tamaño obtenido: $TAMANO bytes${N}"
         
         if [ "$TAMANO" -gt 1000000 ]; then
             echo -e "${V}¡Archivo binario original descargado correctamente!${N}"
@@ -625,7 +626,7 @@ apt-get install openssl -y >/dev/null 2>&1
     if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
         echo -e "\n${R}[!] ERROR CRÍTICO DE RED [!]${N}"
         echo -e "${A}Ningún servidor entregó el archivo válido.${N}"
-        read -p " ► Enter para regresar..."
+        echo -ne " ${W}► Enter para regresar...${N}"; read
         return
     fi
     
@@ -662,7 +663,7 @@ EOF
     else
         echo -e "\n${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.${N}"
     fi
-    read -p " ► Enter para continuar..."
+    echo -ne " ${W}► Enter para continuar...${N}"; read
 }
 
 configurar_banner() {
@@ -673,7 +674,7 @@ configurar_banner() {
     echo -e "${V}Escribe el mensaje principal para tus clientes:${N}"
     echo -e "${A}(Ej: SERVIDOR PREMIUM, PROHIBIDO TORRENT, etc.)${N}"
     echo ""
-    read -p " ► Mensaje: " texto_banner
+    echo -ne " ${W}► Mensaje: ${N}"; read texto_banner
     
     if [ -z "$texto_banner" ]; then
         texto_banner="🚀 SERVIDOR PREMIUM OSMACA 🚀"
@@ -683,12 +684,12 @@ configurar_banner() {
     echo -e "${C}================================================${N}"
     echo -e "       ${A}ELIGE EL COLOR DE TU MENSAJE${N}"
     echo -e "${C}================================================${N}"
-    echo -e " [1] Azul       [5] Gris"
-    echo -e " [2] Amarillo   [6] Anaranjado"
-    echo -e " [3] Verde      [7] Fucsia"
-    echo -e " [4] Rojo       [8] Negro"
+    echo -e " ${W}[1] Azul       [5] Gris${N}"
+    echo -e " ${W}[2] Amarillo   [6] Anaranjado${N}"
+    echo -e " ${W}[3] Verde      [7] Fucsia${N}"
+    echo -e " ${W}[4] Rojo       [8] Negro${N}"
     echo -e "${C}================================================${N}"
-    read -p " ► Opcion (1-8): " op_color
+    echo -ne " ${W}► Opcion (1-8): ${N}"; read op_color
 
     case $op_color in
         1) c_html="blue" ;;
@@ -719,75 +720,86 @@ EOF
     echo -e "${V}¡Banner configurado con éxito!${N}"
     echo -e "${A}Ahora se mostrará tu mensaje en color en la app.${N}"
     echo ""
-    read -p " ► Presiona Enter para regresar al menú..."
+    echo -ne " ${W}► Presiona Enter para regresar al menú...${N}"; read
 }
 
-# ==========================================
-# FUNCIÓN NUEVA: CONFIGURADOR DE COLORES
-# ==========================================
 configurar_colores() {
     while true; do
         clear
         echo -e "${C}================================================${N}"
         echo -e "       ${A}🎨 CONFIGURADOR DE TEMAS VISUALES 🎨${N}"
         echo -e "${C}================================================${N}"
-        echo -e " Elige un tema visual para aplicarlo a todo tu menú."
-        echo -e " Los cambios se guardarán automáticamente."
+        echo -e " ${W}Elige un tema vibrante para aplicarlo a TODO tu menú.${N}"
+        echo -e " ${W}Los cambios aplican al instante y no se borran.${N}"
         echo ""
-        echo -e " ${V}[1]${N} 🌿 Tema Original   (Bordes Cyan, Textos Verde/Amarillo)"
-        echo -e " ${R}[2]${N} 🔴 Tema Oro Rojo   (Bordes Rojos, Textos Amarillo Oro)"
-        echo -e " ${M}[3]${N} 👾 Tema Cyberpunk  (Bordes Magenta, Textos Cyan)"
-        echo -e " ${C}[4]${N} 🌊 Tema Océano     (Bordes Azul Oscuro, Textos Blancos)"
-        echo -e " ${V}[5]${N} 💻 Tema Hacker     (Puro verde estilo Matrix)"
-        echo -e " ${A}[6]${N} ☀️ Tema Amanecer   (Bordes Amarillos, Éxito Verde)"
-        echo -e " ${C}[0]${N} ↩️  Regresar al Menú Principal"
+        echo -e " ${V}[1]${N} ${W}💎 Original Brillante  (Cyan y Blanco Intenso)${N}"
+        echo -e " ${R}[2]${N} ${W}🔥 Oro Rojo Intenso    (Rojos y Amarillos Neón)${N}"
+        echo -e " ${M}[3]${N} ${W}👾 Cyberpunk Neón      (Fucsia, Cyan y Blanco)${N}"
+        echo -e " ${V}[4]${N} ${W}💻 Matrix Hacker       (Tonos Verdes Brillantes)${N}"
+        echo -e " ${C}[5]${N} ${W}🌊 Océano Profundo     (Azules y Cyan Brillantes)${N}"
+        echo -e " ${A}[6]${N} ${W}🌋 Fuego Volcánico     (Rojos, Naranjas Oscuros)${N}"
+        echo -e " ${M}[7]${N} ${W}🌌 Galaxia Oscura      (Morados y Azules Neón)${N}"
+        echo -e " ${A}[8]${N} ${W}☢️ Tóxico Contraste    (Amarillo, Fucsia y Verde)${N}"
+        echo -e " ${C}[0]${N} ${W}↩️  Regresar al Menú Principal${N}"
         echo -e "${C}================================================${N}"
-        read -p " ► Elige un tema (1-6): " op_tema
+        echo -ne " ${W}► Elige un tema (1-8): ${N}"; read op_tema
 
         case $op_tema in
             1)
-                # Cyan(C), Verde(V), Amarillo(A), Rojo(R), Magenta(M)
+                # Cyan(C), Verde(V), Amarillo(A), Rojo(R), Magenta(M), Blanco Puro(W)
                 cat << 'EOF' > /etc/osmaca_tema.conf
-C='\033[0;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'
+C='\033[1;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
 EOF
                 ;;
             2)
-                # Rojo Intenso(C), Verde(V), Amarillo Oro(A), Rojo Base(R), Blanco(M)
+                # Rojo(C), Amarillo(V), Rojo Claro(A), Rojo Base(R), Amarillo Oscuro(M), Blanco Puro(W)
                 cat << 'EOF' > /etc/osmaca_tema.conf
-C='\033[1;31m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[0;31m'; N='\033[0m'; M='\033[1;37m'
+C='\033[1;31m'; V='\033[1;33m'; A='\033[1;31m'; R='\033[0;31m'; N='\033[0m'; M='\033[1;33m'; W='\033[1;37m'
 EOF
                 ;;
             3)
-                # Magenta(C), Verde(V), Cyan(A), Rojo(R), Amarillo(M)
+                # Magenta(C), Cyan(V), Amarillo(A), Rojo(R), Magenta(M), Blanco Puro(W)
                 cat << 'EOF' > /etc/osmaca_tema.conf
-C='\033[1;35m'; V='\033[1;32m'; A='\033[1;36m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;33m'
+C='\033[1;35m'; V='\033[1;36m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
 EOF
                 ;;
             4)
-                # Azul Fuerte(C), Verde(V), Cyan(A), Rojo(R), Blanco(M)
+                # Puro Verde en distintas tonalidades, letras incluidas
                 cat << 'EOF' > /etc/osmaca_tema.conf
-C='\033[1;34m'; V='\033[1;32m'; A='\033[1;36m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;37m'
+C='\033[1;32m'; V='\033[1;32m'; A='\033[1;32m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;32m'; W='\033[1;32m'
 EOF
                 ;;
             5)
-                # Verde Oscuro(C), Verde Claro(V), Verde(A), Rojo(R), Verde(M)
+                # Azules y Cyan, letras Cyan
                 cat << 'EOF' > /etc/osmaca_tema.conf
-C='\033[0;32m'; V='\033[1;32m'; A='\033[0;32m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;32m'
+C='\033[1;34m'; V='\033[1;36m'; A='\033[1;34m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;36m'; W='\033[1;36m'
 EOF
                 ;;
             6)
-                # Naranja/Amarillo Oscuro(C), Verde(V), Amarillo(A), Rojo(R), Rojo Intenso(M)
+                # Amarillos, Naranjas y Rojos. Letras Blancas
                 cat << 'EOF' > /etc/osmaca_tema.conf
-C='\033[0;33m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;31m'
+C='\033[1;33m'; V='\033[1;31m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;31m'; W='\033[1;37m'
+EOF
+                ;;
+            7)
+                # Morados y Azules. Letras Blancas
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[1;35m'; V='\033[1;34m'; A='\033[1;36m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'; W='\033[1;37m'
+EOF
+                ;;
+            8)
+                # Alto contraste. Letras Verdes
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[1;33m'; V='\033[1;35m'; A='\033[1;32m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;33m'; W='\033[1;32m'
 EOF
                 ;;
             0) break ;;
             *) echo -e " ${R}Opción inválida.${N}"; sleep 1; continue ;;
         esac
         
-        # Leer el nuevo archivo para que los colores cambien frente a tus ojos
+        # Recargar configuración inmediatamente
         source /etc/osmaca_tema.conf
-        echo -e "\n ${V}¡Tema visual aplicado con éxito!${N}"
+        echo -e "\n ${V}¡Tema visual vibrante aplicado con éxito!${N}"
         sleep 1
     done
 }
@@ -800,31 +812,31 @@ PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF
 PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PHCR=$(es hcr-server)
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script Osmaca ) 🍄${N}"
-echo -e "--------------------------------------------------------"
-echo -e " ${C}[1]${N} OpenSSH       $P22    ${C}[11]${N} PSIPHON SERVER ${R}[OFF]${N}"
-echo -e " ${C}[2]${N} DROPBEAR      ${R}[OFF]${N}   ${C}[12]${N} TCP DNS        ${A}(#BETA)${N}"
-echo -e " ${C}[3]${N} OPENVPN       ${R}[OFF]${N}   ${C}[13]${N} WEBMIN         ${R}[OFF]${N}"
-echo -e " ${C}[4]${N} SSL/TLS       $PSSL    ${C}[14]${N} SLOWDNS        ${R}[OFF]${N}"
-echo -e " ${C}[5]${N} SHADOWSOCKS-R ${R}[OFF]${N}   ${C}[15]${N} SSL->PYTHON    ${R}[OFF]${N}"
-echo -e " ${C}[6]${N} SQUID         ${R}[OFF]${N}   ${C}[16]${N} SSLH MULTIPLEX ${R}[OFF]${N}"
-echo -e " ${C}[7]${N} PROXY PYTHON  $PPY    ${C}[17]${N} OVER WEBSOCKET ${A}(#BETA)${N}"
-echo -e " ${C}[8]${N} V2RAY MANAGER $PV2    ${C}[18]${N} SOCKS5         ${A}(#BETA)${N}"
-echo -e " ${C}[9]${N} CFA ( CLASH ) ${R}[OFF]${N}   ${C}[19]${N} Protocolos UDP $PUDP"
-echo -e " ${C}[10]${N} TROJAN-GO     ${R}[OFF]${N}   ${C}[20]${N} ${C}FUNCIONES EN DISEÑO!${N}"
+echo -e "${C}--------------------------------------------------------${N}"
+echo -e " ${C}[1]${N} ${W}OpenSSH       ${N}$P22    ${C}[11]${N} ${W}PSIPHON SERVER ${R}[OFF]${N}"
+echo -e " ${C}[2]${N} ${W}DROPBEAR      ${R}[OFF]${N}   ${C}[12]${N} ${W}TCP DNS        ${A}(#BETA)${N}"
+echo -e " ${C}[3]${N} ${W}OPENVPN       ${R}[OFF]${N}   ${C}[13]${N} ${W}WEBMIN         ${R}[OFF]${N}"
+echo -e " ${C}[4]${N} ${W}SSL/TLS       ${N}$PSSL    ${C}[14]${N} ${W}SLOWDNS        ${R}[OFF]${N}"
+echo -e " ${C}[5]${N} ${W}SHADOWSOCKS-R ${R}[OFF]${N}   ${C}[15]${N} ${W}SSL->PYTHON    ${R}[OFF]${N}"
+echo -e " ${C}[6]${N} ${W}SQUID         ${R}[OFF]${N}   ${C}[16]${N} ${W}SSLH MULTIPLEX ${R}[OFF]${N}"
+echo -e " ${C}[7]${N} ${W}PROXY PYTHON  ${N}$PPY    ${C}[17]${N} ${W}OVER WEBSOCKET ${A}(#BETA)${N}"
+echo -e " ${C}[8]${N} ${W}V2RAY MANAGER ${N}$PV2    ${C}[18]${N} ${W}SOCKS5         ${A}(#BETA)${N}"
+echo -e " ${C}[9]${N} ${W}CFA ( CLASH ) ${R}[OFF]${N}   ${C}[19]${N} ${W}Protocolos UDP ${N}$PUDP"
+echo -e " ${C}[10]${N} ${W}TROJAN-GO     ${R}[OFF]${N}   ${C}[20]${N} ${M}FUNCIONES EN DISEÑO!${N}"
 echo -e " "
 echo -e "${A}🍄 INSTALACION DE HERRAMIENTAS Y SERVICIOS 🍄${N}"
-echo -e "--------------------------------------------------------"
-echo -e " ${C}[21]${N} BLOCK TORRENT        ${C}[22]${N} BadVPN         $PBAD"
-echo -e " ${C}[23]${N} TCP (BBR|Plus) ${R}[OFF]${N} ${C}[24]${N} FAILBAN        $PFB"
-echo -e " ${C}[25]${N} ARCHIVO ONLINE ${V}[81]${N}  ${C}[26]${N} UP|DOWN SpeedTest"
-echo -e " ${C}[27]${N} DETALLES DEL VPS     ${C}[28]${N} BLOCK ADS      ${R}[OFF]${N}"
-echo -e " ${C}[29]${N} DNS CUSTOM (NETFLIX) ${C}[30]${N} HERRAMIENTAS EXTRAS"
-echo -e " ${C}[31]${N} REINICIAR SERVICIOS  ${C}[32]${N} Brook Server   ${R}[OFF]${N}"
-echo -e " ${C}[33]${N} FIREWALL (IPTABLES)  ${C}[34]${N} Enable/Change PASSWD ROOT"
-echo -e " ${C}[35]${N} AToken [APP's] ${R}[OFF]${N} ${C}[36]${N} BHTTP [APP's]  ${R}[OFF]${N}"
-echo -e " ${C}[37]${N} HCR [HTTP C.]  $PHCR ${C}[0]${N}  ${R}[ REGRESAR ]${N}"
-echo -e "--------------------------------------------------------"
-read -p " ► Opcion : " op_inst
+echo -e "${C}--------------------------------------------------------${N}"
+echo -e " ${C}[21]${N} ${W}BLOCK TORRENT        ${C}[22]${N} ${W}BadVPN         ${N}$PBAD"
+echo -e " ${C}[23]${N} ${W}TCP (BBR|Plus) ${R}[OFF]${N} ${C}[24]${N} ${W}FAILBAN        ${N}$PFB"
+echo -e " ${C}[25]${N} ${W}ARCHIVO ONLINE ${V}[81]${N}  ${C}[26]${N} ${W}UP|DOWN SpeedTest${N}"
+echo -e " ${C}[27]${N} ${W}DETALLES DEL VPS     ${C}[28]${N} ${W}BLOCK ADS      ${R}[OFF]${N}"
+echo -e " ${C}[29]${N} ${W}DNS CUSTOM (NETFLIX) ${C}[30]${N} ${W}HERRAMIENTAS EXTRAS${N}"
+echo -e " ${C}[31]${N} ${W}REINICIAR SERVICIOS  ${C}[32]${N} ${W}Brook Server   ${R}[OFF]${N}"
+echo -e " ${C}[33]${N} ${W}FIREWALL (IPTABLES)  ${C}[34]${N} ${W}Enable/Change PASSWD ROOT${N}"
+echo -e " ${C}[35]${N} ${W}AToken [APP's] ${R}[OFF]${N} ${C}[36]${N} ${W}BHTTP [APP's]  ${R}[OFF]${N}"
+echo -e " ${C}[37]${N} ${W}HCR [HTTP C.]  ${N}$PHCR ${C}[0]${N}  ${R}[ REGRESAR ]${N}"
+echo -e "${C}--------------------------------------------------------${N}"
+echo -ne " ${W}► Opcion : ${N}"; read op_inst
 case $op_inst in
 4) menu_ssl ;;
 7) menu_py ;;
@@ -834,7 +846,7 @@ case $op_inst in
 22) menu_badvpn ;;
 24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo "Listo"; read -p "Enter..." ;;
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p "Enter..." ;;
-27) info_sistema; read -p "Enter..." ;;
+27) info_sistema; echo -ne " ${W}Enter para continuar...${N}"; read ;;
 31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
 33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
 34) passwd root; read -p "Enter..." ;;
@@ -848,20 +860,20 @@ done
 while true; do
 clear
 info_sistema
-echo -e " ${V}[01]${N} ⇨ CONTROL USUARIOS (SSH/SSL/VMESS)"
-echo -e " ${V}[02]${N} ⇨ [!] OPTIMIZAR VPS      [${R}OFF${N}]"
-echo -e " ${V}[03]${N} ⇨ CONTADOR ONLINE USERS  [${R}OFF${N}]"
-echo -e " ${V}[04]${N} ⇨ AUTOINICIAR SCRIPT     [${R}OFF${N}]"
-echo -e " ${V}[05]${N} ⇨ INSTALADOR DE PROTOCOLOS"
-echo -e " ${V}[06]${N} ⇨ 📝 CONFIGURAR BANNER (MENSAJE)"
-echo -e " ${V}[07]${N} ⇨ 🎨 CAMBIAR COLORES DEL MENU"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " ${V}[08]${N} ⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ⇨ [ SALIR ]"
-echo -e "${A}────────────────────────────────────────────────────────${N}"
-read -p " ► Opcion : " opcion
+echo -e " ${V}[01]${N} ${W}⇨ CONTROL USUARIOS (SSH/SSL/VMESS)${N}"
+echo -e " ${V}[02]${N} ${W}⇨ [!] OPTIMIZAR VPS      [${R}OFF${N}${W}]${N}"
+echo -e " ${V}[03]${N} ${W}⇨ CONTADOR ONLINE USERS  [${R}OFF${N}${W}]${N}"
+echo -e " ${V}[04]${N} ${W}⇨ AUTOINICIAR SCRIPT     [${R}OFF${N}${W}]${N}"
+echo -e " ${V}[05]${N} ${W}⇨ INSTALADOR DE PROTOCOLOS${N}"
+echo -e " ${V}[06]${N} ${W}⇨ 📝 CONFIGURAR BANNER (MENSAJE)${N}"
+echo -e " ${V}[07]${N} ${W}⇨ 🎨 CAMBIAR COLORES DEL MENU${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -e " ${V}[08]${N} ${W}⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ${W}⇨ [ SALIR ]${N}"
+echo -e "${C}────────────────────────────────────────────────────────${N}"
+echo -ne " ${W}► Opcion : ${N}"; read opcion
 case $opcion in
 1) menu_usuarios ;;
-2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.${N}"; read -p "Enter..." ;;
+2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.${N}"; echo -ne " ${W}Enter para continuar...${N}"; read ;;
 3|4|5|8) menu_protocolos ;;
 6) configurar_banner ;;
 7) configurar_colores ;;
