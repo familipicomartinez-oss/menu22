@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # ==========================================
-# CEREBRO DE COLORES EXTENDIDOS 256 (NEÓN PURO)
+# CEREBRO DE COLORES EXTENDIDOS 256 (NEÓN PURO MÁXIMO)
 # ==========================================
 # Colores por defecto (Paleta 256: Cyan 51, Verde 46, Amarillo 226, Rojo 196)
 C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
@@ -234,8 +234,9 @@ echo -e " ${W}Estado:${N} $(es stunnel4)"
 echo -e "${C}----------------------------------------${N}"
 echo -e " ${V}[1]${N} ${W}🟢 Instalar Certificado SSL (Base)${N}"
 echo -e " ${V}[2]${N} ${W}➕ Adicionar Puerto Extra al SSL${N}"
-echo -e " ${A}[3]${N} ${W}⏸️  Detener SSL${N}"
-echo -e " ${R}[4]${N} ${W}🗑️  Desinstalar${N}"
+echo -e " ${R}[3]${N} ${W}➖ Eliminar un Puerto SSL${N}"
+echo -e " ${A}[4]${N} ${W}⏸️  Detener SSL${N}"
+echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Todo${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver${N}"
 echo -e "${C}----------------------------------------${N}"
 echo -ne " ${W}► Opcion : ${N}"; read op_ssl
@@ -269,8 +270,44 @@ systemctl restart stunnel4
 echo -e "\n ${V}¡Puerto SSL $p_ext adicionado exitosamente y redirigiendo al $p_int!${N}"
 echo -ne " ${W}► Enter para continuar...${N}"; read
 ;;
-3) systemctl stop stunnel4; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
-4) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
+3)
+if [ ! -f /etc/stunnel/stunnel.conf ]; then
+    echo -e "\n ${R}ERROR: No hay SSL instalado.${N}"
+    echo -ne " ${W}► Enter para continuar...${N}"; read
+    continue
+fi
+clear
+echo -e "${C}=== ELIMINAR PUERTO SSL ===${N}"
+echo -e " ${W}Puertos SSL actualmente activos:${N}"
+PUERTOS_ACTUALES=$(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' ')
+if [ -z "$PUERTOS_ACTUALES" ]; then
+    echo -e " ${R}No se encontraron puertos configurados.${N}"
+else
+    for pt in $PUERTOS_ACTUALES; do
+        echo -e " 🔹 Puerto: ${V}$pt${N}"
+    done
+fi
+echo -e "${C}────────────────────────────────────────${N}"
+echo -ne " ${W}► Ingresa el puerto a eliminar: ${N}"; read p_del
+if [ -z "$p_del" ]; then
+    echo -e " ${R}Cancelado.${N}"; read -p "Enter..."; continue
+fi
+
+if grep -q "accept = $p_del" /etc/stunnel/stunnel.conf; then
+    BLOQUE=$(grep -B 1 "accept = $p_del" /etc/stunnel/stunnel.conf | grep '\[' | head -n 1)
+    BLOQUE_ESC=$(echo "$BLOQUE" | sed 's/\[/\\[/g; s/\]/\\]/g')
+    sed -i "/^$BLOQUE_ESC$/,/^connect =/d" /etc/stunnel/stunnel.conf
+    
+    ufw delete allow $p_del/tcp >/dev/null 2>&1
+    systemctl restart stunnel4
+    echo -e "\n ${V}¡Puerto SSL $p_del eliminado exitosamente!${N}"
+else
+    echo -e "\n ${R}El puerto $p_del no existe en la configuración.${N}"
+fi
+echo -ne " ${W}► Enter para continuar...${N}"; read
+;;
+4) systemctl stop stunnel4; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
+5) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
 0) break ;;
 *) echo -e " ${R}Opción inválida.${N}"; sleep 1 ;;
 esac
