@@ -77,26 +77,34 @@ echo -e "${C}──────────────────────�
 }
 
 # ==========================================
-# MOTOR DE VERIFICACIÓN ONLINE
+# MOTOR DE VERIFICACIÓN ONLINE CON CONTADOR
 # ==========================================
 ver_usuarios_online() {
     clear
     echo -e "${C}================================================${N}"
     echo -e "       ${A}📡 MONITOREO DE USUARIOS ONLINE 📡${N}"
     echo -e "${C}================================================${N}"
-    echo -e " ${W}Escanenado conexiones en tiempo real...${N}"
+    echo -e " ${W}Escanenado conexiones y límites en tiempo real...${N}"
     echo -e "${C}────────────────────────────────────────────────────────${N}"
     
-    # Obtener lista de usuarios reales del sistema
     USERS=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' /etc/passwd)
     
     if [ -z "$USERS" ]; then
         echo -e " ${R}No hay usuarios creados en el sistema.${N}"
     else
         for user in $USERS; do
-            # Verificar si tiene un proceso SSH activo
-            if ps -u "$user" 2>/dev/null | grep -q sshd; then
-                # Usuario ONLINE: Extraer la hora de inicio de sesión y la IP
+            # Leer el límite de conexiones del usuario
+            if [ -f "/etc/vps_limites/$user" ]; then
+                limite=$(cat /etc/vps_limites/$user)
+            else
+                limite="?"
+            fi
+            
+            # Contar las conexiones activas reales
+            conex=$(ps -u "$user" 2>/dev/null | grep -c sshd)
+            
+            if [ "$conex" -gt 0 ]; then
+                # Usuario ONLINE
                 INFO_CON=$(who | grep "^$user " | head -n 1)
                 if [ -n "$INFO_CON" ]; then
                     HORA=$(echo "$INFO_CON" | awk '{print $4}')
@@ -105,16 +113,15 @@ ver_usuarios_online() {
                     HORA="Activo"
                     IP_CLI="Oculta"
                 fi
-                echo -e " 👤 ${W}$user${N} -> ${V}[ ONLINE ]${N} ${W}(Desde: $HORA | IP: $IP_CLI)${N}"
+                echo -e " 👤 ${W}$user${N} -> ${V}[ ONLINE ]${N} ${W}(Conex: $conex/$limite | Desde: $HORA | IP: $IP_CLI)${N}"
             else
-                # Usuario OFFLINE: Buscar la última vez que se conectó en los registros
+                # Usuario OFFLINE
                 ULTIMA=$(last -n 1 "$user" | head -n 1)
                 if [[ "$ULTIMA" == *"wtmp begins"* ]] || [[ -z "$ULTIMA" ]]; then
-                    echo -e " 👤 ${W}$user${N} -> ${R}[ OFFLINE ]${N} ${W}(Nunca se ha conectado)${N}"
+                    echo -e " 👤 ${W}$user${N} -> ${R}[ OFFLINE ]${N} ${W}(Límite: $limite | Nunca se ha conectado)${N}"
                 else
-                    # Extraer el día y la hora del registro
                     FECHA_OFF=$(echo "$ULTIMA" | awk '{print $4, $5, $6}')
-                    echo -e " 👤 ${W}$user${N} -> ${R}[ OFFLINE ]${N} ${W}(Última vez: $FECHA_OFF)${N}"
+                    echo -e " 👤 ${W}$user${N} -> ${R}[ OFFLINE ]${N} ${W}(Límite: $limite | Última vez: $FECHA_OFF)${N}"
                 fi
             fi
         done
