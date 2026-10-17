@@ -1,10 +1,10 @@
 #!/bin/bash
 
 # ==========================================
-# CEREBRO DE COLORES HIGH-INTENSITY (NEÓN PURO ANSI)
+# CEREBRO DE COLORES EXTENDIDOS 256 (NEÓN PURO)
 # ==========================================
-# Colores por defecto (Paleta ANSI 90: Brillo Máximo sin bug de terminal)
-C='\033[1;96m'; V='\033[1;92m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
+# Colores por defecto (Paleta 256: Cyan 51, Verde 46, Amarillo 226, Rojo 196)
+C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
 
 # Si el usuario ya eligió un tema antes, el script lo lee y aplica los colores
 if [ -f /etc/zeroday_tema.conf ]; then
@@ -234,9 +234,8 @@ echo -e " ${W}Estado:${N} $(es stunnel4)"
 echo -e "${C}----------------------------------------${N}"
 echo -e " ${V}[1]${N} ${W}🟢 Instalar Certificado SSL (Base)${N}"
 echo -e " ${V}[2]${N} ${W}➕ Adicionar Puerto Extra al SSL${N}"
-echo -e " ${R}[3]${N} ${W}➖ Eliminar un Puerto SSL${N}"
-echo -e " ${A}[4]${N} ${W}⏸️  Detener SSL${N}"
-echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Todo${N}"
+echo -e " ${A}[3]${N} ${W}⏸️  Detener SSL${N}"
+echo -e " ${R}[4]${N} ${W}🗑️  Desinstalar${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver${N}"
 echo -e "${C}----------------------------------------${N}"
 echo -ne " ${W}► Opcion : ${N}"; read op_ssl
@@ -270,44 +269,8 @@ systemctl restart stunnel4
 echo -e "\n ${V}¡Puerto SSL $p_ext adicionado exitosamente y redirigiendo al $p_int!${N}"
 echo -ne " ${W}► Enter para continuar...${N}"; read
 ;;
-3)
-if [ ! -f /etc/stunnel/stunnel.conf ]; then
-    echo -e "\n ${R}ERROR: No hay SSL instalado.${N}"
-    echo -ne " ${W}► Enter para continuar...${N}"; read
-    continue
-fi
-clear
-echo -e "${C}=== ELIMINAR PUERTO SSL ===${N}"
-echo -e " ${W}Puertos SSL actualmente activos:${N}"
-PUERTOS_ACTUALES=$(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' ')
-if [ -z "$PUERTOS_ACTUALES" ]; then
-    echo -e " ${R}No se encontraron puertos configurados.${N}"
-else
-    for pt in $PUERTOS_ACTUALES; do
-        echo -e " 🔹 Puerto: ${V}$pt${N}"
-    done
-fi
-echo -e "${C}────────────────────────────────────────${N}"
-echo -ne " ${W}► Ingresa el puerto a eliminar: ${N}"; read p_del
-if [ -z "$p_del" ]; then
-    echo -e " ${R}Cancelado.${N}"; read -p "Enter..."; continue
-fi
-
-if grep -q "accept = $p_del" /etc/stunnel/stunnel.conf; then
-    BLOQUE=$(grep -B 1 "accept = $p_del" /etc/stunnel/stunnel.conf | grep '\[' | head -n 1)
-    BLOQUE_ESC=$(echo "$BLOQUE" | sed 's/\[/\\[/g; s/\]/\\]/g')
-    sed -i "/^$BLOQUE_ESC$/,/^connect =/d" /etc/stunnel/stunnel.conf
-    
-    ufw delete allow $p_del/tcp >/dev/null 2>&1
-    systemctl restart stunnel4
-    echo -e "\n ${V}¡Puerto SSL $p_del eliminado exitosamente!${N}"
-else
-    echo -e "\n ${R}El puerto $p_del no existe en la configuración.${N}"
-fi
-echo -ne " ${W}► Enter para continuar...${N}"; read
-;;
-4) systemctl stop stunnel4; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
-5) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
+3) systemctl stop stunnel4; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
+4) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
 0) break ;;
 *) echo -e " ${R}Opción inválida.${N}"; sleep 1 ;;
 esac
@@ -855,16 +818,16 @@ configurar_colores() {
         echo -e "${C}================================================${N}"
         echo -e "       ${A}🎨 CONFIGURADOR DE TEMAS (ALTA INTENSIDAD) 🎨${N}"
         echo -e "${C}================================================${N}"
-        echo -e " ${W}Motor ANSI High-Intensity activo. Elige tu estilo.${N}"
+        echo -e " ${W}Motor de 256 colores activos. Elige tu estilo.${N}"
         echo ""
-        echo -e " ${V}[1]${N} ${W}💎 Diamante Neón       (Cyan 96 y Blanco Puro)${N}"
-        echo -e " ${R}[2]${N} ${W}🔥 Oro Rojo Estallado  (Rojo 91 y Amarillo 93)${N}"
-        echo -e " ${M}[3]${N} ${W}👾 Cyberpunk 2077      (Fucsia 95 y Cyan 96)${N}"
-        echo -e " ${V}[4]${N} ${W}💻 Matrix Radiactivo   (Verde 92 Puro)${N}"
-        echo -e " ${C}[5]${N} ${W}🌊 Océano Eléctrico    (Azul 94 y Cyan 96)${N}"
-        echo -e " ${A}[6]${N} ${W}🌋 Fuego Solar         (Naranja 93 y Rojo 91)${N}"
-        echo -e " ${M}[7]${N} ${W}🌌 Galaxia Profunda    (Morado 95 y Azul 94)${N}"
-        echo -e " ${A}[8]${N} ${W}☢️ Tóxico Extremo      (Amarillo 93 y Verde 95)${N}"
+        echo -e " ${V}[1]${N} ${W}💎 Diamante Neón       (Cyan 51 y Blanco Puro)${N}"
+        echo -e " ${R}[2]${N} ${W}🔥 Oro Rojo Estallado  (Rojo 196 y Amarillo 226)${N}"
+        echo -e " ${M}[3]${N} ${W}👾 Cyberpunk 2077      (Fucsia 201 y Cyan 51)${N}"
+        echo -e " ${V}[4]${N} ${W}💻 Matrix Radiactivo   (Verde 46 Puro)${N}"
+        echo -e " ${C}[5]${N} ${W}🌊 Océano Eléctrico    (Azul 33 y Cyan 51)${N}"
+        echo -e " ${A}[6]${N} ${W}🌋 Fuego Solar         (Naranja 214 y Rojo 196)${N}"
+        echo -e " ${M}[7]${N} ${W}🌌 Galaxia Profunda    (Morado 93 y Fucsia 201)${N}"
+        echo -e " ${A}[8]${N} ${W}☢️ Tóxico Extremo      (Amarillo 226 y Verde 46)${N}"
         echo -e " ${C}[0]${N} ${W}↩️  Regresar al Menú Principal${N}"
         echo -e "${C}================================================${N}"
         echo -ne " ${W}► Elige un tema (1-8): ${N}"; read op_tema
@@ -872,42 +835,42 @@ configurar_colores() {
         case $op_tema in
             1)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;96m'; V='\033[1;92m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
+C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
 EOF
                 ;;
             2)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;91m'; V='\033[1;93m'; A='\033[1;91m'; R='\033[0;91m'; N='\033[0m'; M='\033[1;93m'; W='\033[1;97m'
+C='\033[38;5;196m'; V='\033[38;5;226m'; A='\033[38;5;214m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;220m'; W='\033[38;5;231m'
 EOF
                 ;;
             3)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;95m'; V='\033[1;96m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
+C='\033[38;5;201m'; V='\033[38;5;51m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;198m'; W='\033[38;5;231m'
 EOF
                 ;;
             4)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;92m'; V='\033[1;92m'; A='\033[1;92m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;92m'; W='\033[1;92m'
+C='\033[38;5;46m'; V='\033[38;5;82m'; A='\033[38;5;118m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;48m'; W='\033[38;5;84m'
 EOF
                 ;;
             5)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;94m'; V='\033[1;96m'; A='\033[1;94m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;96m'; W='\033[1;96m'
+C='\033[38;5;33m'; V='\033[38;5;51m'; A='\033[38;5;39m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;45m'; W='\033[38;5;159m'
 EOF
                 ;;
             6)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;93m'; V='\033[1;91m'; A='\033[1;93m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;91m'; W='\033[1;97m'
+C='\033[38;5;214m'; V='\033[38;5;196m'; A='\033[38;5;226m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;202m'; W='\033[38;5;231m'
 EOF
                 ;;
             7)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;95m'; V='\033[1;94m'; A='\033[1;96m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;95m'; W='\033[1;97m'
+C='\033[38;5;93m'; V='\033[38;5;51m'; A='\033[38;5;141m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
 EOF
                 ;;
             8)
                 cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[1;93m'; V='\033[1;95m'; A='\033[1;92m'; R='\033[1;91m'; N='\033[0m'; M='\033[1;93m'; W='\033[1;92m'
+C='\033[38;5;226m'; V='\033[38;5;198m'; A='\033[38;5;46m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;214m'; W='\033[38;5;51m'
 EOF
                 ;;
             0) break ;;
