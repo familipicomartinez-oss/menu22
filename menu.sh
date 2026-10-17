@@ -93,18 +93,15 @@ ver_usuarios_online() {
         echo -e " ${R}No hay usuarios creados en el sistema.${N}"
     else
         for user in $USERS; do
-            # Leer el límite de conexiones del usuario
             if [ -f "/etc/vps_limites/$user" ]; then
                 limite=$(cat /etc/vps_limites/$user)
             else
                 limite="?"
             fi
             
-            # Contar las conexiones activas reales
             conex=$(ps -u "$user" 2>/dev/null | grep -c sshd)
             
             if [ "$conex" -gt 0 ]; then
-                # Usuario ONLINE
                 INFO_CON=$(who | grep "^$user " | head -n 1)
                 if [ -n "$INFO_CON" ]; then
                     HORA=$(echo "$INFO_CON" | awk '{print $4}')
@@ -115,7 +112,6 @@ ver_usuarios_online() {
                 fi
                 echo -e " 👤 ${W}$user${N} -> ${V}[ ONLINE ]${N} ${W}(Conex: $conex/$limite | Desde: $HORA | IP: $IP_CLI)${N}"
             else
-                # Usuario OFFLINE
                 ULTIMA=$(last -n 1 "$user" | head -n 1)
                 if [[ "$ULTIMA" == *"wtmp begins"* ]] || [[ -z "$ULTIMA" ]]; then
                     echo -e " 👤 ${W}$user${N} -> ${R}[ OFFLINE ]${N} ${W}(Límite: $limite | Nunca se ha conectado)${N}"
@@ -219,9 +215,10 @@ clear
 echo -e "${A}--- GESTOR DE PROTOCOLO SSL/TLS ---${N}"
 echo -e " ${W}Estado:${N} $(es stunnel4)"
 echo -e "${C}----------------------------------------${N}"
-echo -e " ${V}[1]${N} ${W}🟢 Instalar Certificado SSL (Interno 22 -> Externo a elegir)${N}"
-echo -e " ${A}[2]${N} ${W}⏸️  Detener SSL${N}"
-echo -e " ${R}[3]${N} ${W}🗑️  Desinstalar${N}"
+echo -e " ${V}[1]${N} ${W}🟢 Instalar Certificado SSL (Base)${N}"
+echo -e " ${V}[2]${N} ${W}➕ Adicionar Puerto Extra al SSL${N}"
+echo -e " ${A}[3]${N} ${W}⏸️  Detener SSL${N}"
+echo -e " ${R}[4]${N} ${W}🗑️  Desinstalar${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver${N}"
 echo -e "${C}----------------------------------------${N}"
 echo -ne " ${W}► Opcion : ${N}"; read op_ssl
@@ -237,9 +234,28 @@ ufw allow $p2/tcp >/dev/null 2>&1
 systemctl restart stunnel4
 echo -e "${V}¡SSL instalado y activo en puerto externo $p2!${N}"
 read -p "Enter..." ;;
-2) systemctl stop stunnel4; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
-3) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
+2)
+if [ ! -f /etc/stunnel/stunnel.conf ]; then
+    echo -e "\n ${R}ERROR: Debes Instalar el SSL primero (Opción 1).${N}"
+    echo -ne " ${W}► Enter para continuar...${N}"; read
+    continue
+fi
+echo -e "\n${C}=== ADICIONAR PUERTO SSL ===${N}"
+echo -ne " ${W}► Puerto Local Interno (Default: 22): ${N}"; read p_int; p_int=${p_int:-22}
+echo -ne " ${W}► NUEVO Puerto SSL a escuchar (Ej: 444, 445): ${N}"; read p_ext
+if [ -z "$p_ext" ]; then
+    echo -e " ${R}Cancelado.${N}"; read -p "Enter..."; continue
+fi
+echo -e "\n[stunnel-extra-$p_ext]\naccept = $p_ext\nconnect = 127.0.0.1:$p_int" >> /etc/stunnel/stunnel.conf
+ufw allow $p_ext/tcp >/dev/null 2>&1
+systemctl restart stunnel4
+echo -e "\n ${V}¡Puerto SSL $p_ext adicionado exitosamente y redirigiendo al $p_int!${N}"
+echo -ne " ${W}► Enter para continuar...${N}"; read
+;;
+3) systemctl stop stunnel4; echo -e "${A}Detenido.${N}"; read -p "Enter..." ;;
+4) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e "${R}Desinstalado.${N}"; read -p "Enter..." ;;
 0) break ;;
+*) echo -e " ${R}Opción inválida.${N}"; sleep 1 ;;
 esac
 done
 }
