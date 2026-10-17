@@ -1,8 +1,20 @@
 #!/bin/bash
+
+# ==========================================
+# CEREBRO DE COLORES (CARGA AUTOMÁTICA)
+# ==========================================
+# Colores por defecto
 C='\033[0;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'
+
+# Si el usuario ya eligió un tema antes, el script lo lee y lo aplica "de verdad"
+if [ -f /etc/osmaca_tema.conf ]; then
+    source /etc/osmaca_tema.conf
+fi
+
 IP_VPS=$(hostname -I | awk '{print $1}'); [ -z "$IP_VPS" ] && IP_VPS="Desconocida"
 es() { systemctl is-active --quiet $1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 ep() { ss -tlnp | grep -q ":$1 " > /dev/null 2>&1 || ss -ulnp | grep -q ":$1 " > /dev/null 2>&1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
+
 info_sistema() {
 MEM_TOTAL=$(free -m | awk '/Mem:/ {print $2}')
 MEM_USADA=$(free -m | awk '/Mem:/ {print $3}')
@@ -653,9 +665,6 @@ EOF
     read -p " ► Enter para continuar..."
 }
 
-# ==========================================
-# FUNCIÓN NUEVA: CONFIGURAR BANNER INTERACTIVO
-# ==========================================
 configurar_banner() {
     clear
     echo -e "${C}================================================${N}"
@@ -688,7 +697,7 @@ configurar_banner() {
         4) c_html="red" ;;
         5) c_html="gray" ;;
         6) c_html="orange" ;;
-        7) c_html="magenta" ;; # Magenta funciona como Fucsia en HTML
+        7) c_html="magenta" ;; 
         8) c_html="black" ;;
         *) c_html="white" ;;
     esac
@@ -711,6 +720,76 @@ EOF
     echo -e "${A}Ahora se mostrará tu mensaje en color en la app.${N}"
     echo ""
     read -p " ► Presiona Enter para regresar al menú..."
+}
+
+# ==========================================
+# FUNCIÓN NUEVA: CONFIGURADOR DE COLORES
+# ==========================================
+configurar_colores() {
+    while true; do
+        clear
+        echo -e "${C}================================================${N}"
+        echo -e "       ${A}🎨 CONFIGURADOR DE TEMAS VISUALES 🎨${N}"
+        echo -e "${C}================================================${N}"
+        echo -e " Elige un tema visual para aplicarlo a todo tu menú."
+        echo -e " Los cambios se guardarán automáticamente."
+        echo ""
+        echo -e " ${V}[1]${N} 🌿 Tema Original   (Bordes Cyan, Textos Verde/Amarillo)"
+        echo -e " ${R}[2]${N} 🔴 Tema Oro Rojo   (Bordes Rojos, Textos Amarillo Oro)"
+        echo -e " ${M}[3]${N} 👾 Tema Cyberpunk  (Bordes Magenta, Textos Cyan)"
+        echo -e " ${C}[4]${N} 🌊 Tema Océano     (Bordes Azul Oscuro, Textos Blancos)"
+        echo -e " ${V}[5]${N} 💻 Tema Hacker     (Puro verde estilo Matrix)"
+        echo -e " ${A}[6]${N} ☀️ Tema Amanecer   (Bordes Amarillos, Éxito Verde)"
+        echo -e " ${C}[0]${N} ↩️  Regresar al Menú Principal"
+        echo -e "${C}================================================${N}"
+        read -p " ► Elige un tema (1-6): " op_tema
+
+        case $op_tema in
+            1)
+                # Cyan(C), Verde(V), Amarillo(A), Rojo(R), Magenta(M)
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[0;36m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;35m'
+EOF
+                ;;
+            2)
+                # Rojo Intenso(C), Verde(V), Amarillo Oro(A), Rojo Base(R), Blanco(M)
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[1;31m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[0;31m'; N='\033[0m'; M='\033[1;37m'
+EOF
+                ;;
+            3)
+                # Magenta(C), Verde(V), Cyan(A), Rojo(R), Amarillo(M)
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[1;35m'; V='\033[1;32m'; A='\033[1;36m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;33m'
+EOF
+                ;;
+            4)
+                # Azul Fuerte(C), Verde(V), Cyan(A), Rojo(R), Blanco(M)
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[1;34m'; V='\033[1;32m'; A='\033[1;36m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;37m'
+EOF
+                ;;
+            5)
+                # Verde Oscuro(C), Verde Claro(V), Verde(A), Rojo(R), Verde(M)
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[0;32m'; V='\033[1;32m'; A='\033[0;32m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;32m'
+EOF
+                ;;
+            6)
+                # Naranja/Amarillo Oscuro(C), Verde(V), Amarillo(A), Rojo(R), Rojo Intenso(M)
+                cat << 'EOF' > /etc/osmaca_tema.conf
+C='\033[0;33m'; V='\033[1;32m'; A='\033[1;33m'; R='\033[1;31m'; N='\033[0m'; M='\033[1;31m'
+EOF
+                ;;
+            0) break ;;
+            *) echo -e " ${R}Opción inválida.${N}"; sleep 1; continue ;;
+        esac
+        
+        # Leer el nuevo archivo para que los colores cambien frente a tus ojos
+        source /etc/osmaca_tema.conf
+        echo -e "\n ${V}¡Tema visual aplicado con éxito!${N}"
+        sleep 1
+    done
 }
 
 menu_protocolos() {
@@ -775,15 +854,18 @@ echo -e " ${V}[03]${N} ⇨ CONTADOR ONLINE USERS  [${R}OFF${N}]"
 echo -e " ${V}[04]${N} ⇨ AUTOINICIAR SCRIPT     [${R}OFF${N}]"
 echo -e " ${V}[05]${N} ⇨ INSTALADOR DE PROTOCOLOS"
 echo -e " ${V}[06]${N} ⇨ 📝 CONFIGURAR BANNER (MENSAJE)"
+echo -e " ${V}[07]${N} ⇨ 🎨 CAMBIAR COLORES DEL MENU"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
-echo -e " ${V}[07]${N} ⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ⇨ [ SALIR ]"
+echo -e " ${V}[08]${N} ⇨ [!] UPDATE / REMOVE  |  ${V}[0]${N} ⇨ [ SALIR ]"
 echo -e "${A}────────────────────────────────────────────────────────${N}"
 read -p " ► Opcion : " opcion
 case $opcion in
 1) menu_usuarios ;;
 2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.${N}"; read -p "Enter..." ;;
-3|4|5|7) menu_protocolos ;;
+3|4|5|8) menu_protocolos ;;
 6) configurar_banner ;;
+7) configurar_colores ;;
 0) exit 0 ;;
+*) echo -e "${R}Opción inválida.${N}"; sleep 1 ;;
 esac
 done
