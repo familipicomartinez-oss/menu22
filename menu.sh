@@ -34,25 +34,42 @@ STR_PORTS+="\n "
 C_PORT=0
 fi
 }
+
 ss -tlnp | grep -q ":22 " && agregar_puerto "🔹 SSH: ${V}22${N}"
 
-if ss -tlnp | grep -q ":80 "; then
-    systemctl is-active --quiet xray && grep -q '"port": 80' /usr/local/etc/xray/config.json 2>/dev/null && agregar_puerto "🔹 V2RAY: ${V}80${N}" || agregar_puerto "🔹 PROXY: ${V}80${N}"
+# V2RAY Dinámico
+if [ -f /usr/local/etc/xray/puerto.txt ]; then
+    PT_V2=$(cat /usr/local/etc/xray/puerto.txt)
+    if ss -tlnp | grep -q ":$PT_V2 "; then
+        agregar_puerto "🔹 V2RAY: ${V}$PT_V2${N}"
+    fi
 fi
 
-if ss -tlnp | grep -q ":443 "; then
-    systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && agregar_puerto "🔹 V2RAY: ${V}443${N}" || agregar_puerto "🔹 SSL: ${V}443${N}"
+# PROXY PYTHON Dinámico
+if [ -f /etc/proxy.py ]; then
+    PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )')
+    if [ -n "$PT_PY" ] && ss -tlnp | grep -q ":$PT_PY "; then
+         agregar_puerto "🔹 PROXY: ${V}$PT_PY${N}"
+    fi
 fi
 
-ss -tlnp | grep -q ":444 " && agregar_puerto "🔹 SSL: ${V}444${N}"
-ss -ulnp | grep -q ":36712" && agregar_puerto "🔹 UDP: ${V}36712${N}"
+# SSL STUNNEL Dinámico
+if [ -f /etc/stunnel/stunnel.conf ]; then
+    for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' '); do
+        if ss -tlnp | grep -q ":$p_ssl "; then
+            agregar_puerto "🔹 SSL: ${V}$p_ssl${N}"
+        fi
+    done
+fi
+
+ss -ulnp | grep -q ":36712 " && agregar_puerto "🔹 UDP: ${V}36712${N}"
 ss -tlnp | grep -q ":53 " && agregar_puerto "🔹 DNS: ${V}53${N}"
 ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
 ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
 
 if [ -f /etc/hcr/config ]; then
     source /etc/hcr/config
-    if ss -tlnp | grep -qw "$P_INJ"; then
+    if ss -tlnp | grep -q ":$P_INJ "; then
         agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
     else
         agregar_puerto "🔹 HCR: ${R}CERRADO ($P_INJ)${N}"
