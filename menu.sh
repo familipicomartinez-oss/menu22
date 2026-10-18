@@ -63,7 +63,7 @@ if [ -f /etc/stunnel/stunnel.conf ]; then
 fi
 
 ss -ulnp | grep -q ":36712 " && agregar_puerto "🔹 UDP:  ${V}36712  ${N}"
-ss -ulnp | grep -q ":5300 " && agregar_puerto "🔹 DNS:  ${V}5300  ${N}"
+ss -ulnp | grep -q ":5300 " && agregar_puerto "🔹 SlowDNS:  ${V}5300  ${N}"
 ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN:  ${V}7300  ${N}"
 ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN:  ${V}7200  ${N}"
 
@@ -83,7 +83,7 @@ echo -e "${C}──────────────────────�
 echo -e " ${W}🔹 S.O:  ${N}${V}$S_OS${N}  ${W}🔹 Base:  ${N}${V}$S_ARCH${N}  ${W}🔹 CPU's:  ${N}${V}$S_CPU  ${N}"
 echo -e " ${W}🔹 IP:  ${N}${V}$IP_VPS${N}  ${W}🔹 FECHA:  ${N}${A}$FECHA_ACT  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V5.7)  ${N}"
+echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V5.8)  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${M}🟢 PUERTOS ACTIVOS:   ${N}"
 echo -e " $STR_PORTS"
@@ -174,11 +174,11 @@ echo "$l" > "/etc/vps_limites/$u"
 if [ ! -f /usr/local/bin/monitor_limites.sh ]; then
 cat << 'EOF_MONITOR' > /usr/local/bin/monitor_limites.sh
 #!/bin/bash
-for user in \$(ls /etc/vps_limites/ 2>/dev/null); do
-limite=\$(cat /etc/vps_limites/\$user)
-conex=\$(ps -u \$user 2>/dev/null | grep -c sshd)
-if [ "\$conex" -gt "\$limite" ]; then
-pkill -u \$user sshd
+for user in $(ls /etc/vps_limites/ 2>/dev/null); do
+limite=$(cat /etc/vps_limites/$user)
+conex=$(ps -u $user 2>/dev/null | grep -c sshd)
+if [ "$conex" -gt "$limite" ]; then
+pkill -u $user sshd
 fi
 done
 EOF_MONITOR
@@ -204,6 +204,7 @@ if ss -tlnp | grep -q ":443 "; then
     systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="${W}🔹 V2RAY:  ${V}443${N}   " || STR_P+="${W}🔹 SSL:  ${V}443${N}   "
 fi
 ss -ulnp | grep -q ":36712" && STR_P+="${W}🔹 UDP:  ${V}36712${N}   "
+ss -ulnp | grep -q ":5300" && STR_P+="${W}🔹 SlowDNS:  ${V}5300${N}   "
 [ -z "$STR_P" ] && STR_P="${W}🔹  ${R}Sin puertos configurados   ${N}"
 echo -e " $STR_P"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
@@ -212,6 +213,12 @@ echo -e " ${W}USUARIO :${N} ${V}$u  ${N}"
 echo -e " ${W}PASSWD  :${N} ${V}$p  ${N}"
 echo -e " ${W}LIMITE  :${N} ${V}$l  ${N}"
 echo -e " ${W}VALIDEZ :${N} ${V}$(date -d "+$d days" +%d/%m/%Y)  ${N}"
+if [ -s /etc/slowdns/pub_key.txt ] && [ -s /etc/slowdns/ns_domain.txt ]; then
+    echo -e "${C}────────────────────────────────────────────────────────${N}"
+    echo -e " ${A}SLOWDNS CONFIG (HTTP CUSTOM / INJECTOR)${N}"
+    echo -e " ${W}NameServer (NS) :${N} ${V}$(cat /etc/slowdns/ns_domain.txt)${N}"
+    echo -e " ${W}PUB KEY         :${N} ${A}$(cat /etc/slowdns/pub_key.txt)${N}"
+fi
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${R}✓ El servidor desconectará automáticamente al   ${N}"
 echo -e " ${R}  usuario si supera el límite de $l conexiones.   ${N}"
@@ -795,11 +802,22 @@ EOF
 menu_slowdns() {
 while true; do
     clear
-    ESTADO=$(systemctl is-active --quiet slowdns && echo -e "${V}Activo${N}" || echo -e "${R}Inactivo${N}")
+    ESTADO=$(systemctl is-active --quiet slowdns && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
+    if [ -s /etc/slowdns/ns_domain.txt ]; then
+        NS_ACT=$(cat /etc/slowdns/ns_domain.txt)
+    else
+        NS_ACT="NULL"
+    fi
+    if [ -s /etc/slowdns/puerto_local.txt ]; then
+        PT_ACT=$(cat /etc/slowdns/puerto_local.txt)
+    else
+        PT_ACT="NULL"
+    fi
+
     echo -e "${C}================================================${N}"
-    echo -e "       ${A}🛡️ INSTALADOR SLOWDNS (NS) 🛡️   ${N}"
+    echo -e "       ${A}🛡️ INSTALADOR SLOWDNS | ZeroDay 🛡️   ${N}"
     echo -e "${C}================================================${N}"
-    echo -e " ${W}Estado:${N} $ESTADO"
+    echo -e " ${W}SlowDNS ->${N} ${A}$NS_ACT${N} ${W}->${N} ${V}$PT_ACT${N} ${W}| ESTADO ->${N} $ESTADO"
     echo -e "${C}------------------------------------------------${N}"
     echo -e " ${V}[1]${N} ${W}🟢 Instalar SlowDns   ${N}"
     echo -e " ${A}[2]${N} ${W}👁️ Ver Información / Llaves   ${N}"
@@ -815,7 +833,7 @@ while true; do
         3)
             echo -e "${C}================================================${N}"
             echo -e "${V}Reiniciando servicio SlowDNS...${N}"
-            systemctl restart slowdns
+            systemctl restart slowdns 2>/dev/null
             sleep 2
             if systemctl is-active --quiet slowdns; then
                 echo -e "${V}¡Servicio reiniciado correctamente!${N}"
@@ -854,11 +872,17 @@ instalar_slowdns() {
     echo -e "       ${A}⚙️ INSTALACIÓN DE SLOWDNS ⚙️   ${N}"
     echo -e "${C}================================================${N}"
     
+    # Si existe una instalación previa rota (sin llave pública), se limpia automáticamente
     if [ -d "/etc/slowdns" ]; then
-        echo -e "${R}[!] SlowDNS ya parece estar instalado.${N}"
-        echo -e "${W}Usa la opción 4 para removerlo antes de reinstalar.${N}"
-        read -p "Enter..."
-        return
+        if [ -s "/etc/slowdns/pub_key.txt" ]; then
+            echo -e "${R}[!] SlowDNS ya se encuentra instalado con su llave.${N}"
+            echo -e "${W}Usa la opción 4 para removerlo antes de reinstalar.${N}"
+            read -p "Enter..."
+            return
+        else
+            systemctl stop slowdns >/dev/null 2>&1
+            rm -rf /etc/slowdns
+        fi
     fi
 
     echo -ne " ${W}► Puerto de redirección local (Ej: 22):   ${N}"; read puerto_local
@@ -875,23 +899,79 @@ instalar_slowdns() {
 
     echo -e "\n${V}Instalando dependencias...${N}"
     apt-get update -y > /dev/null 2>&1
-    apt-get install iptables curl wget -y > /dev/null 2>&1
+    apt-get install iptables curl wget dnsutils -y > /dev/null 2>&1
 
     mkdir -p /etc/slowdns
-    cd /etc/slowdns
+    cd /etc/slowdns || return
 
     echo -e "${V}Descargando binario DNSTT Server...${N}"
-    wget -q -O dnstt-server "https://raw.githubusercontent.com/binarios/dnstt/main/dnstt-server"
-    chmod +x dnstt-server
+    MIRRORS_DNS=(
+        "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/dnstt-server"
+        "https://raw.githubusercontent.com/ChumoGH/ADMcgh/master/Plugins/SlowDNS/dnstt-server"
+        "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Utils/SlowDNS/dnstt-server"
+        "https://raw.githubusercontent.com/aleskxyz/dnstt/master/dnstt-server"
+        "https://raw.githubusercontent.com/fisabiliyusri/Mantap/main/slowdns/dnstt-server"
+    )
+
+    DESCARGA_DNS=0
+    for url_dns in "${MIRRORS_DNS[@]}"; do
+        curl -4 -sL --connect-timeout 8 "$url_dns" -o /etc/slowdns/dnstt-server
+        TAM_DNS=$(wc -c < /etc/slowdns/dnstt-server 2>/dev/null || echo 0)
+        if [ "$TAM_DNS" -gt 1000000 ]; then
+            chmod +x /etc/slowdns/dnstt-server
+            if /etc/slowdns/dnstt-server -help >/dev/null 2>&1 || /etc/slowdns/dnstt-server -h >/dev/null 2>&1; then
+                DESCARGA_DNS=1
+                break
+            fi
+        fi
+        rm -f /etc/slowdns/dnstt-server
+    done
+
+    # Respaldo infalible: si los enlaces externos fallan, compila el binario oficial con Go
+    if [ "$DESCARGA_DNS" -eq 0 ]; then
+        echo -e "${A}Construyendo binario nativo DNSTT para tu VPS (tarda ~15 seg)...${N}"
+        apt-get install golang-go git -y > /dev/null 2>&1
+        rm -rf /tmp/dnstt_src
+        git clone -q https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt_src 2>/dev/null || git clone -q https://repo.or.cz/dnstt.git /tmp/dnstt_src 2>/dev/null
+        if [ -d "/tmp/dnstt_src/dnstt-server" ]; then
+            cd /tmp/dnstt_src/dnstt-server
+            go build -o /etc/slowdns/dnstt-server >/dev/null 2>&1
+            cd /etc/slowdns
+            rm -rf /tmp/dnstt_src
+            chmod +x /etc/slowdns/dnstt-server 2>/dev/null
+        fi
+    fi
+
+    if [ ! -x "/etc/slowdns/dnstt-server" ]; then
+        echo -e "\n${R}[!] Error crítico: No se pudo obtener el binario dnstt-server.${N}"
+        rm -rf /etc/slowdns
+        read -p "Enter..."
+        return
+    fi
 
     echo -e "${V}Generando llaves criptográficas...${N}"
-    ./dnstt-server -gen > keys.txt
-    
-    priv_key=$(grep "Private key:" keys.txt | awk '{print $3}')
-    pub_key=$(grep "Public key:" keys.txt | awk '{print $3}')
-    
-    echo "$dominio_ns" > ns_domain.txt
-    echo "$pub_key" > pub_key.txt
+    /etc/slowdns/dnstt-server -gen-key -privkey-file /etc/slowdns/server.key -pubkey-file /etc/slowdns/server.pub > /etc/slowdns/keys.txt 2>&1
+
+    if [ -s "/etc/slowdns/server.pub" ]; then
+        priv_key=$(tr -d ' \n\r' < /etc/slowdns/server.key)
+        pub_key=$(tr -d ' \n\r' < /etc/slowdns/server.pub)
+    else
+        priv_key=$(grep -i "priv" /etc/slowdns/keys.txt | awk '{print $NF}' | tr -d ' \n\r')
+        pub_key=$(grep -i "pub" /etc/slowdns/keys.txt | awk '{print $NF}' | tr -d ' \n\r')
+        echo "$priv_key" > /etc/slowdns/server.key
+        echo "$pub_key" > /etc/slowdns/server.pub
+    fi
+
+    if [ -z "$pub_key" ]; then
+        echo -e "\n${R}[!] Error al generar la llave pública.${N}"
+        rm -rf /etc/slowdns
+        read -p "Enter..."
+        return
+    fi
+
+    echo "$dominio_ns" > /etc/slowdns/ns_domain.txt
+    echo "$pub_key" > /etc/slowdns/pub_key.txt
+    echo "$puerto_local" > /etc/slowdns/puerto_local.txt
 
     echo -e "${V}Configurando demonio en SystemD...${N}"
     cat <<EOF > /etc/systemd/system/slowdns.service
@@ -903,7 +983,7 @@ After=network.target
 Type=simple
 User=root
 WorkingDirectory=/etc/slowdns
-ExecStart=/etc/slowdns/dnstt-server -udp :5300 -privkey $priv_key $dominio_ns 127.0.0.1:$puerto_local
+ExecStart=/etc/slowdns/dnstt-server -udp :5300 -privkey-file /etc/slowdns/server.key $dominio_ns 127.0.0.1:$puerto_local
 Restart=always
 RestartSec=3
 
@@ -912,21 +992,27 @@ WantedBy=multi-user.target
 EOF
 
     echo -e "${V}Aplicando reglas de enrutamiento (IPtables)...${N}"
+    iptables -D INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null
+    iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null
     iptables -I INPUT -p udp --dport 5300 -j ACCEPT
     iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300
-    iptables-save > /etc/iptables/rules.v4 2>/dev/null || netfilter-persistent save 2>/dev/null
+    ufw allow 53/udp >/dev/null 2>&1
+    ufw allow 5300/udp >/dev/null 2>&1
+    mkdir -p /etc/iptables
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null
 
     systemctl daemon-reload
     systemctl enable slowdns > /dev/null 2>&1
-    systemctl start slowdns
+    systemctl restart slowdns
 
     echo -e "\n${C}================================================${N}"
     echo -e "${V}¡SLOWDNS INSTALADO Y ACTIVADO CON ÉXITO!${N}"
     echo -e "${C}================================================${N}"
-    echo -e "${A} DOMINIO NS :${N} ${W}$dominio_ns${N}"
-    echo -e "${A} PUBLIC KEY :${N} ${W}$pub_key${N}"
+    echo -e "${A} REDIRECCIÓN :${N} ${V}$puerto_local -> 5300${N}"
+    echo -e "${A} DOMINIO NS  :${N} ${W}$dominio_ns${N}"
+    echo -e "${A} PUBLIC KEY  :${N} ${V}$pub_key${N}"
     echo -e "${C}================================================${N}"
-    read -p "Enter..."
+    echo -ne " ${W}► Presiona Enter para continuar...   ${N}"; read
 }
 
 info_slowdns() {
@@ -935,17 +1021,19 @@ info_slowdns() {
     echo -e "       ${A}ℹ️ INFORMACIÓN SLOWDNS ℹ️   ${N}"
     echo -e "${C}================================================${N}"
     
-    if [ ! -f "/etc/slowdns/pub_key.txt" ]; then
-        echo -e "${R}[!] SlowDNS no está instalado.${N}"
+    if [ ! -s "/etc/slowdns/pub_key.txt" ]; then
+        echo -e "${R}[!] SlowDNS no está instalado o no tiene llave activa.${N}"
     else
         dominio_ns=$(cat /etc/slowdns/ns_domain.txt)
         pub_key=$(cat /etc/slowdns/pub_key.txt)
+        puerto_local=$(cat /etc/slowdns/puerto_local.txt 2>/dev/null || echo "22")
         echo -e "${V}Datos para configurar tu app HTTP Custom:${N}\n"
-        echo -e "${A} DOMINIO NS :${N} ${W}$dominio_ns${N}"
-        echo -e "${A} PUBLIC KEY :${N} ${W}$pub_key${N}"
+        echo -e "${A} PUERTO BASE :${N} ${V}$puerto_local${N}"
+        echo -e "${A} DOMINIO NS  :${N} ${W}$dominio_ns${N}"
+        echo -e "${A} PUBLIC KEY  :${N} ${V}$pub_key${N}"
     fi
     echo -e "${C}================================================${N}"
-    read -p "Enter..."
+    echo -ne " ${W}► Presiona Enter para volver...   ${N}"; read
 }
 
 configurar_banner() {
@@ -1124,7 +1212,7 @@ case $op_inst in
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p "Enter..." ;;
 27) info_sistema; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
 31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
-33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
+33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
 34) passwd root; read -p "Enter..." ;;
 37) menu_hcr ;;
 0) break ;;
@@ -1149,7 +1237,7 @@ echo -e "${C}──────────────────────�
 echo -ne " ${W}► Opcion :   ${N}"; read opcion
 case $opcion in
 1) menu_usuarios ;;
-2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
+2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
 3|4|5|8) menu_protocolos ;;
 6) configurar_banner ;;
 7) configurar_colores ;;
