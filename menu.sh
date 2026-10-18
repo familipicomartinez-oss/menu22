@@ -27,21 +27,29 @@ FECHA_ACT=$(date +'%d/%m/%Y-%H:%M')
 STR_PORTS=""
 C_PORT=0
 agregar_puerto() {
-STR_PORTS+="${W}$1        ${N}"
-C_PORT=$((C_PORT+1))
-if [ $C_PORT -eq 2 ]; then
-STR_PORTS+="\n "
-C_PORT=0
-fi
+    local texto_plano=$(echo -e "$1" | sed -r 's/\x1B\[[0-9;]*[mK]//g' | sed 's/🔹//g')
+    local largo=${#texto_plano}
+    local espacios=$(( 18 - largo ))
+    [ $espacios -lt 2 ] && espacios=2
+    local pad=$(printf '%*s' "$espacios" "")
+
+    if [ $C_PORT -eq 0 ]; then
+        [ -n "$STR_PORTS" ] && STR_PORTS+="\n "
+        STR_PORTS+="${W}$1${N}${pad}"
+        C_PORT=1
+    else
+        STR_PORTS+="${W}$1${N}"
+        C_PORT=0
+    fi
 }
 
-ss -tlnp | grep -q ":22 " && agregar_puerto "🔹 SSH:  ${V}22  ${N}"
+ss -tlnp | grep -q ":22 " && agregar_puerto "🔹 SSH: ${V}22${N}"
 
 # V2RAY Dinámico
 if [ -f /usr/local/etc/xray/puerto.txt ]; then
     PT_V2=$(cat /usr/local/etc/xray/puerto.txt)
     if ss -tlnp | grep -q ":$PT_V2 "; then
-        agregar_puerto "🔹 V2RAY:  ${V}$PT_V2  ${N}"
+        agregar_puerto "🔹 V2RAY: ${V}$PT_V2${N}"
     fi
 fi
 
@@ -49,7 +57,7 @@ fi
 if [ -f /etc/proxy.py ]; then
     PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )')
     if [ -n "$PT_PY" ] && ss -tlnp | grep -q ":$PT_PY "; then
-         agregar_puerto "🔹 PROXY:  ${V}$PT_PY  ${N}"
+         agregar_puerto "🔹 PROXY: ${V}$PT_PY${N}"
     fi
 fi
 
@@ -57,22 +65,22 @@ fi
 if [ -f /etc/stunnel/stunnel.conf ]; then
     for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' '); do
         if ss -tlnp | grep -q ":$p_ssl "; then
-            agregar_puerto "🔹 SSL:  ${V}$p_ssl  ${N}"
+            agregar_puerto "🔹 SSL: ${V}$p_ssl${N}"
         fi
     done
 fi
 
-ss -ulnp | grep -q ":36712 " && agregar_puerto "🔹 UDP:  ${V}36712  ${N}"
-ss -ulnp | grep -q ":5300 " && agregar_puerto "🔹 SlowDNS:  ${V}5300  ${N}"
-ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN:  ${V}7300  ${N}"
-ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN:  ${V}7200  ${N}"
+ss -ulnp | grep -q ":36712 " && agregar_puerto "🔹 UDP: ${V}36712${N}"
+ss -ulnp | grep -q ":5300 " && agregar_puerto "🔹 SlowDNS: ${V}5300${N}"
+ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
+ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
 
 if [ -f /etc/hcr/config ]; then
     source /etc/hcr/config
     if ss -tlnp | grep -qw "$P_INJ"; then
-        agregar_puerto "🔹 HCR:  ${V}$P_INJ  ${N}"
+        agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
     else
-        agregar_puerto "🔹 HCR:  ${R}CERRADO ($P_INJ)  ${N}"
+        agregar_puerto "🔹 HCR: ${R}CERRADO ($P_INJ)${N}"
     fi
 fi
 
