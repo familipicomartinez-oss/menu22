@@ -53,6 +53,14 @@ if [ -f /usr/local/etc/xray/puerto.txt ]; then
     fi
 fi
 
+# SHADOWSOCKS-R Dinámico
+if [ -f /etc/ssr/puerto.txt ]; then
+    PT_SSR=$(cat /etc/ssr/puerto.txt)
+    if ss -tlnp | grep -q ":$PT_SSR "; then
+        agregar_puerto "🔹 SSR: ${V}$PT_SSR${N}"
+    fi
+fi
+
 # PROXY PYTHON Dinámico
 if [ -f /etc/proxy.py ]; then
     PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )')
@@ -91,7 +99,7 @@ echo -e "${C}──────────────────────�
 echo -e " ${W}🔹 S.O:  ${N}${V}$S_OS${N}  ${W}🔹 Base:  ${N}${V}$S_ARCH${N}  ${W}🔹 CPU's:  ${N}${V}$S_CPU  ${N}"
 echo -e " ${W}🔹 IP:  ${N}${V}$IP_VPS${N}  ${W}🔹 FECHA:  ${N}${A}$FECHA_ACT  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V5.8)  ${N}"
+echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V5.9)  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${M}🟢 PUERTOS ACTIVOS:   ${N}"
 echo -e " $STR_PORTS"
@@ -326,6 +334,315 @@ echo -ne " ${W}► Enter para continuar...   ${N}"; read
 0) break ;;
 *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1 ;;
 esac
+done
+}
+
+# ==========================================
+# MÓDULO SHADOWSOCKS-R NATIVO (OPCIÓN 5)
+# ==========================================
+b64_url() {
+    echo -n "$1" | base64 -w 0 | tr '+/' '-_' | tr -d '='
+}
+
+generar_enlaces_ssr() {
+    if [ ! -f /etc/ssr/datos.conf ]; then return; fi
+    source /etc/ssr/datos.conf
+
+    PASS_B64=$(b64_url "$SSR_PASS")
+    REMARKS_B64=$(b64_url "$SSR_USER")
+    OBFSPARAM_B64=$(b64_url "$SSR_OBFS_PARAM")
+    PROTPARAM_B64=$(b64_url "")
+
+    RAW_SSR="${SSR_IP}:${SSR_PORT}:${SSR_PROTO}:${SSR_METHOD}:${SSR_OBFS}:${PASS_B64}/?obfsparam=${OBFSPARAM_B64}&protoparam=${PROTPARAM_B64}&remarks=${REMARKS_B64}&group=$(b64_url "ZeroDay")"
+    SSR_LINK="ssr://$(b64_url "$RAW_SSR")"
+
+    RAW_SS="${SSR_METHOD}:${SSR_PASS}@${SSR_IP}:${SSR_PORT}"
+    SS_LINK="ss://$(echo -n "$RAW_SS" | base64 -w 0)#${SSR_USER}"
+}
+
+mostrar_info_ssr() {
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "     ${A}ℹ️ CONFIGURACIÓN SHADOWSOCKS-R ℹ️   ${N}"
+    echo -e "${C}================================================${N}"
+    if [ ! -f /etc/ssr/datos.conf ]; then
+        echo -e " ${R}[!] ShadowsocksR no está instalado.   ${N}"
+        echo -e "${C}================================================${N}"
+        echo -ne " ${W}► Presiona Enter para volver...   ${N}"; read
+        return
+    fi
+    generar_enlaces_ssr
+    echo -e " ${W}🔹 Servidor (IP/Host) :${N} ${V}$SSR_IP   ${N}"
+    echo -e " ${W}🔹 Usuario / Perfil   :${N} ${V}$SSR_USER   ${N}"
+    echo -e " ${W}🔹 Puerto             :${N} ${V}$SSR_PORT   ${N}"
+    echo -e " ${W}🔹 Contraseña         :${N} ${V}$SSR_PASS   ${N}"
+    echo -e " ${W}🔹 Encriptación       :${N} ${A}$SSR_METHOD   ${N}"
+    echo -e " ${W}🔹 Protocolo          :${N} ${A}$SSR_PROTO   ${N}"
+    echo -e " ${W}🔹 Ofuscación (OBFS)  :${N} ${A}$SSR_OBFS   ${N}"
+    [ -n "$SSR_OBFS_PARAM" ] && echo -e " ${W}🔹 Obfs Param (SNI)   :${N} ${V}$SSR_OBFS_PARAM   ${N}"
+    echo -e "${C}────────────────────────────────────────────────${N}"
+    echo -e " ${V}🔗 LINK SSR (Cópialo en tu app ShadowsocksR):   ${N}"
+    echo -e " ${A}$SSR_LINK   ${N}\n"
+    echo -e " ${V}🔗 LINK SS CLÁSICO:   ${N}"
+    echo -e " ${W}$SS_LINK   ${N}"
+    echo -e "${C}================================================${N}"
+    echo -ne " ${W}► Presiona Enter para continuar...   ${N}"; read
+}
+
+configurar_cuenta_ssr() {
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "     ${A}⚙️ PARÁMETROS DE CUENTA SHADOWSOCKS-R ⚙️   ${N}"
+    echo -e "${C}================================================${N}"
+
+    echo -ne " ${W}► IP o Dominio [Enter = $IP_VPS]:   ${N}"; read ssr_ip
+    ssr_ip=${ssr_ip:-$IP_VPS}
+
+    echo -ne " ${W}► Nombre de Usuario [Default: ZeroDay]:   ${N}"; read ssr_user
+    ssr_user=${ssr_user:-ZeroDay}
+
+    echo -ne " ${W}► Puerto SSR (Ej: 110, 443, 8388) [Default: 110]:   ${N}"; read ssr_port
+    ssr_port=${ssr_port:-110}
+
+    echo -ne " ${W}► Contraseña [Default: zeroday123]:   ${N}"; read ssr_pass
+    ssr_pass=${ssr_pass:-zeroday123}
+
+    echo -e "\n ${A}Seleccione Tipo de Encriptación:   ${N}"
+    echo -e " ${V}[1]${N} ${W}aes-256-cfb (Recomendado / Clásico)   ${N}"
+    echo -e " ${V}[2]${N} ${W}aes-128-cfb   ${N}"
+    echo -e " ${V}[3]${N} ${W}aes-256-ctr   ${N}"
+    echo -e " ${V}[4]${N} ${W}aes-128-ctr   ${N}"
+    echo -e " ${V}[5]${N} ${W}chacha20-ietf   ${N}"
+    echo -e " ${V}[6]${N} ${W}chacha20   ${N}"
+    echo -e " ${V}[7]${N} ${W}rc4-md5   ${N}"
+    echo -e " ${V}[8]${N} ${W}none (Sin cifrado)   ${N}"
+    echo -ne " ${W}► Opción [Default 1]:   ${N}"; read op_enc
+    case $op_enc in
+        2) ssr_method="aes-128-cfb" ;;
+        3) ssr_method="aes-256-ctr" ;;
+        4) ssr_method="aes-128-ctr" ;;
+        5) ssr_method="chacha20-ietf" ;;
+        6) ssr_method="chacha20" ;;
+        7) ssr_method="rc4-md5" ;;
+        8) ssr_method="none" ;;
+        *) ssr_method="aes-256-cfb" ;;
+    esac
+
+    echo -e "\n ${A}Seleccione Protocolo SSR:   ${N}"
+    echo -e " ${V}[1]${N} ${W}origin (Recomendado / Compatible SS)   ${N}"
+    echo -e " ${V}[2]${N} ${W}auth_sha1_v4   ${N}"
+    echo -e " ${V}[3]${N} ${W}auth_aes128_md5   ${N}"
+    echo -e " ${V}[4]${N} ${W}auth_aes128_sha1   ${N}"
+    echo -e " ${V}[5]${N} ${W}auth_chain_a   ${N}"
+    echo -e " ${V}[6]${N} ${W}auth_chain_b   ${N}"
+    echo -ne " ${W}► Opción [Default 1]:   ${N}"; read op_proto
+    case $op_proto in
+        2) ssr_proto="auth_sha1_v4" ;;
+        3) ssr_proto="auth_aes128_md5" ;;
+        4) ssr_proto="auth_aes128_sha1" ;;
+        5) ssr_proto="auth_chain_a" ;;
+        6) ssr_proto="auth_chain_b" ;;
+        *) ssr_proto="origin" ;;
+    esac
+
+    if [ "$ssr_proto" != "origin" ]; then
+        echo -ne " ${W}► ¿Activar modo compatible con SS clásico? (s/n) [Default: s]:   ${N}"; read comp_p
+        comp_p=${comp_p:-s}
+        [[ "$comp_p" == "s" || "$comp_p" == "S" ]] && ssr_proto_cfg="${ssr_proto}_compatible" || ssr_proto_cfg="$ssr_proto"
+    else
+        ssr_proto_cfg="origin"
+    fi
+
+    echo -e "\n ${A}Seleccione Método de Ofuscación (OBFS):   ${N}"
+    echo -e " ${V}[1]${N} ${W}tls1.2_ticket_auth (Ideal para Host/SNI)   ${N}"
+    echo -e " ${V}[2]${N} ${W}http_simple (Payload HTTP Host)   ${N}"
+    echo -e " ${V}[3]${N} ${W}http_post   ${N}"
+    echo -e " ${V}[4]${N} ${W}random_head   ${N}"
+    echo -e " ${V}[5]${N} ${W}plain (Sin ofuscación)   ${N}"
+    echo -ne " ${W}► Opción [Default 1]:   ${N}"; read op_obfs
+    case $op_obfs in
+        2) ssr_obfs="http_simple" ;;
+        3) ssr_obfs="http_post" ;;
+        4) ssr_obfs="random_head" ;;
+        5) ssr_obfs="plain" ;;
+        *) ssr_obfs="tls1.2_ticket_auth" ;;
+    esac
+
+    if [ "$ssr_obfs" != "plain" ]; then
+        echo -ne " ${W}► ¿Activar OBFS compatible con SS clásico? (s/n) [Default: s]:   ${N}"; read comp_o
+        comp_o=${comp_o:-s}
+        [[ "$comp_o" == "s" || "$comp_o" == "S" ]] && ssr_obfs_cfg="${ssr_obfs}_compatible" || ssr_obfs_cfg="$ssr_obfs"
+        echo -ne " ${W}► Obfs Param / Host Bug (Ej: c.whatsapp.net) [Opcional]:   ${N}"; read ssr_obfs_param
+    else
+        ssr_obfs_cfg="plain"
+        ssr_obfs_param=""
+    fi
+
+    mkdir -p /etc/ssr
+    cat <<EOF > /etc/ssr/config.json
+{
+    "server": "0.0.0.0",
+    "server_ipv6": "::",
+    "server_port": $ssr_port,
+    "local_address": "127.0.0.1",
+    "local_port": 1080,
+    "password": "$ssr_pass",
+    "timeout": 120,
+    "udp_timeout": 60,
+    "method": "$ssr_method",
+    "protocol": "$ssr_proto_cfg",
+    "protocol_param": "",
+    "obfs": "$ssr_obfs_cfg",
+    "obfs_param": "$ssr_obfs_param",
+    "redirect": "",
+    "dns_ipv6": false,
+    "fast_open": false,
+    "workers": 1
+}
+EOF
+
+    cat <<EOF > /etc/ssr/datos.conf
+SSR_IP="$ssr_ip"
+SSR_USER="$ssr_user"
+SSR_PORT="$ssr_port"
+SSR_PASS="$ssr_pass"
+SSR_METHOD="$ssr_method"
+SSR_PROTO="$ssr_proto"
+SSR_OBFS="$ssr_obfs"
+SSR_OBFS_PARAM="$ssr_obfs_param"
+EOF
+    echo "$ssr_port" > /etc/ssr/puerto.txt
+
+    iptables -I INPUT -p tcp --dport "$ssr_port" -j ACCEPT 2>/dev/null
+    iptables -I INPUT -p udp --dport "$ssr_port" -j ACCEPT 2>/dev/null
+    ufw allow "$ssr_port"/tcp >/dev/null 2>&1
+    ufw allow "$ssr_port"/udp >/dev/null 2>&1
+}
+
+instalar_ssr() {
+    configurar_cuenta_ssr
+    echo -e "\n ${V}⏳ Instalando dependencias y librerías C/C++ (libsodium)...   ${N}"
+    apt-get update -y >/dev/null 2>&1
+    apt-get install -y python3 git curl wget libsodium-dev openssl lsof psmisc >/dev/null 2>&1
+
+    rm -rf /usr/local/shadowsocksr
+    echo -e " ${V}⏳ Descargando motor oficial ShadowsocksR...   ${N}"
+    git clone -q -b akkariiin/master https://github.com/shadowsocksrr/shadowsocksr.git /usr/local/shadowsocksr 2>/dev/null || \
+    git clone -q https://github.com/shadowsocksr-backup/shadowsocksr.git /usr/local/shadowsocksr 2>/dev/null
+
+    if [ ! -d "/usr/local/shadowsocksr/shadowsocks" ]; then
+        echo -e "\n ${R}[!] Error al clonar el repositorio base de ShadowsocksR.   ${N}"
+        echo -ne " ${W}► Presiona Enter para continuar...   ${N}"; read
+        return
+    fi
+
+    echo -e " ${V}🔧 Aplicando parches de ingeniería para Ubuntu 24.04/26.04 (OpenSSL 3 & Python 3)...   ${N}"
+    find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/collections\.MutableMapping/collections.abc.MutableMapping/g' {} + 2>/dev/null
+    find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/EVP_CIPHER_CTX_cleanup/EVP_CIPHER_CTX_reset/g' {} + 2>/dev/null
+
+    cat <<EOF > /etc/systemd/system/ssr-server.service
+[Unit]
+Description=ShadowsocksR Native Server (ZeroDay)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/usr/local/shadowsocksr/shadowsocks
+ExecStart=/usr/bin/python3 /usr/local/shadowsocksr/shadowsocks/server.py -c /etc/ssr/config.json
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    PT_NOW=$(cat /etc/ssr/puerto.txt)
+    fuser -k -9 "$PT_NOW"/tcp >/dev/null 2>&1
+    lsof -ti tcp:"$PT_NOW" | xargs kill -9 2>/dev/null
+
+    systemctl daemon-reload
+    systemctl enable ssr-server >/dev/null 2>&1
+    systemctl restart ssr-server
+    sleep 2
+
+    if systemctl is-active --quiet ssr-server; then
+        echo -e "\n ${V}¡SHADOWSOCKS-R INSTALADO Y ACTIVO CON ÉXITO!   ${N}"
+        sleep 1
+        mostrar_info_ssr
+    else
+        echo -e "\n ${R}[!] El servicio SSR no pudo arrancar. Verifica que el puerto esté libre.   ${N}"
+        echo -ne " ${W}► Enter para continuar...   ${N}"; read
+    fi
+}
+
+menu_ssr() {
+while true; do
+    clear
+    ESTADO_SSR=$(systemctl is-active --quiet ssr-server && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
+    PT_SSR_M=$([ -f /etc/ssr/puerto.txt ] && cat /etc/ssr/puerto.txt || echo "NULL")
+    echo -e "${C}================================================${N}"
+    echo -e "     ${A}🛡️ CONTROLADOR DE SHADOWSOCKS-R | ZeroDay 🛡️   ${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " ${W}🔹 Puerto :${N} ${V}$PT_SSR_M${N}  ${W}| Estado :${N} $ESTADO_SSR"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -e " ${V}[1]${N} ${W}🟢 Instalar / Configurar ShadowsocksR   ${N}"
+    echo -e " ${A}[2]${N} ${W}👁️ Mostrar Información y Links (SSR / SS)   ${N}"
+    echo -e " ${C}[3]${N} ${W}⚙️ Modificar Usuario / Puerto / Cifrado   ${N}"
+    echo -e " ${V}[4]${N} ${W}▶️ Iniciar / Reiniciar ShadowsocksR   ${N}"
+    echo -e " ${A}[5]${N} ${W}⏸️ Detener ShadowsocksR   ${N}"
+    echo -e " ${C}[6]${N} ${W}📋 Ver Registro de Eventos (Logs)   ${N}"
+    echo -e " ${R}[7]${N} ${W}🗑️ Desinstalar ShadowsocksR   ${N}"
+    echo -e " ${C}[0]${N} ${W}↩️ REGRESAR AL MENÚ   ${N}"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -ne " ${W}► Opción :   ${N}"; read op_ssr
+
+    case $op_ssr in
+        1) instalar_ssr ;;
+        2) mostrar_info_ssr ;;
+        3)
+            if [ ! -d /usr/local/shadowsocksr ]; then
+                echo -e "\n ${R}[!] Primero instala ShadowsocksR con la Opción 1.   ${N}"
+                sleep 2
+            else
+                configurar_cuenta_ssr
+                systemctl restart ssr-server
+                echo -e "\n ${V}¡Configuración actualizada y reiniciada!   ${N}"
+                sleep 1
+                mostrar_info_ssr
+            fi
+            ;;
+        4)
+            systemctl restart ssr-server 2>/dev/null
+            sleep 1
+            echo -e "\n ${V}¡Servicio ShadowsocksR reiniciado!   ${N}"
+            echo -ne " ${W}► Enter para continuar...   ${N}"; read
+            ;;
+        5)
+            systemctl stop ssr-server 2>/dev/null
+            echo -e "\n ${A}Servicio ShadowsocksR detenido.   ${N}"
+            echo -ne " ${W}► Enter para continuar...   ${N}"; read
+            ;;
+        6)
+            clear
+            echo -e "${A}=== LOGS EN TIEMPO REAL DE SHADOWSOCKS-R ===   ${N}"
+            journalctl -u ssr-server -n 35 --no-pager
+            echo -ne "\n ${W}► Enter para regresar...   ${N}"; read
+            ;;
+        7)
+            echo -ne "\n ${W}► ¿Seguro que deseas eliminar ShadowsocksR? (s/n):   ${N}"; read conf_del
+            if [[ "$conf_del" == "s" || "$conf_del" == "S" ]]; then
+                systemctl stop ssr-server 2>/dev/null
+                systemctl disable ssr-server 2>/dev/null
+                rm -rf /usr/local/shadowsocksr /etc/ssr /etc/systemd/system/ssr-server.service
+                systemctl daemon-reload
+                echo -e "\n ${V}ShadowsocksR desinstalado por completo.   ${N}"
+            fi
+            echo -ne " ${W}► Enter para continuar...   ${N}"; read
+            ;;
+        0) break ;;
+        *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
+    esac
 done
 }
 
@@ -1180,6 +1497,7 @@ PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF
 PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PHCR=$(es hcr-server)
 PDNS=$(es slowdns)
+PSSR=$(es ssr-server)
 
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script ZeroDay ) 🍄   ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
@@ -1187,7 +1505,7 @@ echo -e " ${C}[1]${N} ${W}OpenSSH       ${N}$P22    ${C}[11]${N} ${W}PSIPHON SER
 echo -e " ${C}[2]${N} ${W}DROPBEAR      ${R}[OFF]${N}   ${C}[12]${N} ${W}TCP DNS        ${A}(#BETA)  ${N}"
 echo -e " ${C}[3]${N} ${W}OPENVPN       ${R}[OFF]${N}   ${C}[13]${N} ${W}WEBMIN         ${R}[OFF]  ${N}"
 echo -e " ${C}[4]${N} ${W}SSL/TLS       ${N}$PSSL    ${C}[14]${N} ${W}SLOWDNS        ${N}$PDNS  ${N}"
-echo -e " ${C}[5]${N} ${W}SHADOWSOCKS-R ${R}[OFF]${N}   ${C}[15]${N} ${W}SSL->PYTHON    ${R}[OFF]  ${N}"
+echo -e " ${C}[5]${N} ${W}SHADOWSOCKS-R ${N}$PSSR    ${C}[15]${N} ${W}SSL->PYTHON    ${R}[OFF]  ${N}"
 echo -e " ${C}[6]${N} ${W}SQUID         ${R}[OFF]${N}   ${C}[16]${N} ${W}SSLH MULTIPLEX ${R}[OFF]  ${N}"
 echo -e " ${C}[7]${N} ${W}PROXY PYTHON  ${N}$PPY    ${C}[17]${N} ${W}OVER WEBSOCKET ${A}(#BETA)  ${N}"
 echo -e " ${C}[8]${N} ${W}V2RAY MANAGER ${N}$PV2    ${C}[18]${N} ${W}SOCKS5         ${A}(#BETA)  ${N}"
@@ -1209,6 +1527,7 @@ echo -e "${C}--------------------------------------------------------${N}"
 echo -ne " ${W}► Opcion :   ${N}"; read op_inst
 case $op_inst in
 4) menu_ssl ;;
+5) menu_ssr ;;
 7) menu_py ;;
 8) menu_v2ray ;;
 14) menu_slowdns ;;
@@ -1218,7 +1537,7 @@ case $op_inst in
 24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo " Listo   "; read -p " Enter..." ;;
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p " Enter..." ;;
 27) info_sistema; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
-31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
+31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
 33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; read -p " Enter..." ;;
 34) passwd root; read -p " Enter..." ;;
 37) menu_hcr ;;
