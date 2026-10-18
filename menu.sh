@@ -63,7 +63,7 @@ if [ -f /etc/stunnel/stunnel.conf ]; then
 fi
 
 ss -ulnp | grep -q ":36712 " && agregar_puerto "🔹 UDP:  ${V}36712  ${N}"
-ss -tlnp | grep -q ":53 " && agregar_puerto "🔹 DNS:  ${V}53  ${N}"
+ss -ulnp | grep -q ":5300 " && agregar_puerto "🔹 DNS:  ${V}5300  ${N}"
 ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN:  ${V}7300  ${N}"
 ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN:  ${V}7200  ${N}"
 
@@ -792,6 +792,162 @@ EOF
     echo -ne " ${W}► Enter para continuar...   ${N}"; read
 }
 
+menu_slowdns() {
+while true; do
+    clear
+    ESTADO=$(systemctl is-active --quiet slowdns && echo -e "${V}Activo${N}" || echo -e "${R}Inactivo${N}")
+    echo -e "${C}================================================${N}"
+    echo -e "       ${A}🛡️ INSTALADOR SLOWDNS (NS) 🛡️   ${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " ${W}Estado:${N} $ESTADO"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -e " ${V}[1]${N} ${W}🟢 Instalar SlowDns   ${N}"
+    echo -e " ${A}[2]${N} ${W}👁️ Ver Información / Llaves   ${N}"
+    echo -e " ${C}[3]${N} ${W}🔄 Reiniciar SlowDns   ${N}"
+    echo -e " ${R}[4]${N} ${W}🗑️ Remover SlowDns   ${N}"
+    echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -ne " ${W}► Opcion :   ${N}"; read op_dns
+
+    case $op_dns in
+        1) instalar_slowdns ;;
+        2) info_slowdns ;;
+        3)
+            echo -e "${C}================================================${N}"
+            echo -e "${V}Reiniciando servicio SlowDNS...${N}"
+            systemctl restart slowdns
+            sleep 2
+            if systemctl is-active --quiet slowdns; then
+                echo -e "${V}¡Servicio reiniciado correctamente!${N}"
+            else
+                echo -e "${R}Error al reiniciar el servicio.${N}"
+            fi
+            read -p "Enter..."
+            ;;
+        4)
+            echo -e "${C}================================================${N}"
+            read -p " ¿Estás seguro de eliminar SlowDNS? (s/n): " confirmar
+            if [[ "$confirmar" == "s" || "$confirmar" == "S" ]]; then
+                echo -e "\n${R}Deteniendo y eliminando servicios...${N}"
+                systemctl stop slowdns > /dev/null 2>&1
+                systemctl disable slowdns > /dev/null 2>&1
+                rm -f /etc/systemd/system/slowdns.service
+                systemctl daemon-reload
+                iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 > /dev/null 2>&1
+                iptables -D INPUT -p udp --dport 5300 -j ACCEPT > /dev/null 2>&1
+                rm -rf /etc/slowdns
+                echo -e "${V}SlowDNS ha sido desinstalado completamente.${N}"
+            else
+                echo -e "\n${A}Operación cancelada.${N}"
+            fi
+            read -p "Enter..."
+            ;;
+        0) break ;;
+        *) echo -e "${R}Opción inválida.${N}"; sleep 1 ;;
+    esac
+done
+}
+
+instalar_slowdns() {
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "       ${A}⚙️ INSTALACIÓN DE SLOWDNS ⚙️   ${N}"
+    echo -e "${C}================================================${N}"
+    
+    if [ -d "/etc/slowdns" ]; then
+        echo -e "${R}[!] SlowDNS ya parece estar instalado.${N}"
+        echo -e "${W}Usa la opción 4 para removerlo antes de reinstalar.${N}"
+        read -p "Enter..."
+        return
+    fi
+
+    echo -ne " ${W}► Puerto de redirección local (Ej: 22):   ${N}"; read puerto_local
+    puerto_local=${puerto_local:-22}
+
+    echo -e ""
+    echo -ne " ${W}► Ingresa tu Dominio NS (Ej: ns.midominio.com):   ${N}"; read dominio_ns
+
+    if [ -z "$dominio_ns" ]; then
+        echo -e "\n${R}[!] El dominio NS es obligatorio.${N}"
+        read -p "Enter..."
+        return
+    fi
+
+    echo -e "\n${V}Instalando dependencias...${N}"
+    apt-get update -y > /dev/null 2>&1
+    apt-get install iptables curl wget -y > /dev/null 2>&1
+
+    mkdir -p /etc/slowdns
+    cd /etc/slowdns
+
+    echo -e "${V}Descargando binario DNSTT Server...${N}"
+    wget -q -O dnstt-server "https://raw.githubusercontent.com/binarios/dnstt/main/dnstt-server"
+    chmod +x dnstt-server
+
+    echo -e "${V}Generando llaves criptográficas...${N}"
+    ./dnstt-server -gen > keys.txt
+    
+    priv_key=$(grep "Private key:" keys.txt | awk '{print $3}')
+    pub_key=$(grep "Public key:" keys.txt | awk '{print $3}')
+    
+    echo "$dominio_ns" > ns_domain.txt
+    echo "$pub_key" > pub_key.txt
+
+    echo -e "${V}Configurando demonio en SystemD...${N}"
+    cat <<EOF > /etc/systemd/system/slowdns.service
+[Unit]
+Description=SlowDNS Server (DNSTT)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/slowdns
+ExecStart=/etc/slowdns/dnstt-server -udp :5300 -privkey $priv_key $dominio_ns 127.0.0.1:$puerto_local
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    echo -e "${V}Aplicando reglas de enrutamiento (IPtables)...${N}"
+    iptables -I INPUT -p udp --dport 5300 -j ACCEPT
+    iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300
+    iptables-save > /etc/iptables/rules.v4 2>/dev/null || netfilter-persistent save 2>/dev/null
+
+    systemctl daemon-reload
+    systemctl enable slowdns > /dev/null 2>&1
+    systemctl start slowdns
+
+    echo -e "\n${C}================================================${N}"
+    echo -e "${V}¡SLOWDNS INSTALADO Y ACTIVADO CON ÉXITO!${N}"
+    echo -e "${C}================================================${N}"
+    echo -e "${A} DOMINIO NS :${N} ${W}$dominio_ns${N}"
+    echo -e "${A} PUBLIC KEY :${N} ${W}$pub_key${N}"
+    echo -e "${C}================================================${N}"
+    read -p "Enter..."
+}
+
+info_slowdns() {
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "       ${A}ℹ️ INFORMACIÓN SLOWDNS ℹ️   ${N}"
+    echo -e "${C}================================================${N}"
+    
+    if [ ! -f "/etc/slowdns/pub_key.txt" ]; then
+        echo -e "${R}[!] SlowDNS no está instalado.${N}"
+    else
+        dominio_ns=$(cat /etc/slowdns/ns_domain.txt)
+        pub_key=$(cat /etc/slowdns/pub_key.txt)
+        echo -e "${V}Datos para configurar tu app HTTP Custom:${N}\n"
+        echo -e "${A} DOMINIO NS :${N} ${W}$dominio_ns${N}"
+        echo -e "${A} PUBLIC KEY :${N} ${W}$pub_key${N}"
+    fi
+    echo -e "${C}================================================${N}"
+    read -p "Enter..."
+}
+
 configurar_banner() {
     clear
     echo -e "${C}================================================${N}"
@@ -928,12 +1084,14 @@ P22=$(ep 22); P80=$(es proxypy); PSSL=$(es stunnel4); PPY=$(es proxypy); PUDP=$(
 PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PHCR=$(es hcr-server)
+PDNS=$(es slowdns)
+
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script ZeroDay ) 🍄   ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
 echo -e " ${C}[1]${N} ${W}OpenSSH       ${N}$P22    ${C}[11]${N} ${W}PSIPHON SERVER ${R}[OFF]  ${N}"
 echo -e " ${C}[2]${N} ${W}DROPBEAR      ${R}[OFF]${N}   ${C}[12]${N} ${W}TCP DNS        ${A}(#BETA)  ${N}"
 echo -e " ${C}[3]${N} ${W}OPENVPN       ${R}[OFF]${N}   ${C}[13]${N} ${W}WEBMIN         ${R}[OFF]  ${N}"
-echo -e " ${C}[4]${N} ${W}SSL/TLS       ${N}$PSSL    ${C}[14]${N} ${W}SLOWDNS        ${R}[OFF]  ${N}"
+echo -e " ${C}[4]${N} ${W}SSL/TLS       ${N}$PSSL    ${C}[14]${N} ${W}SLOWDNS        ${N}$PDNS  ${N}"
 echo -e " ${C}[5]${N} ${W}SHADOWSOCKS-R ${R}[OFF]${N}   ${C}[15]${N} ${W}SSL->PYTHON    ${R}[OFF]  ${N}"
 echo -e " ${C}[6]${N} ${W}SQUID         ${R}[OFF]${N}   ${C}[16]${N} ${W}SSLH MULTIPLEX ${R}[OFF]  ${N}"
 echo -e " ${C}[7]${N} ${W}PROXY PYTHON  ${N}$PPY    ${C}[17]${N} ${W}OVER WEBSOCKET ${A}(#BETA)  ${N}"
@@ -958,14 +1116,15 @@ case $op_inst in
 4) menu_ssl ;;
 7) menu_py ;;
 8) menu_v2ray ;;
+14) menu_slowdns ;;
 19) menu_udp ;;
 21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo "Bloqueado"; read -p "Enter..." ;;
 22) menu_badvpn ;;
 24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo "Listo"; read -p "Enter..." ;;
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p "Enter..." ;;
 27) info_sistema; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
-31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
-33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
+31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns >/dev/null 2>&1; echo "Reiniciado"; read -p "Enter..." ;;
+33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo "Puertos Abiertos"; read -p "Enter..." ;;
 34) passwd root; read -p "Enter..." ;;
 37) menu_hcr ;;
 0) break ;;
@@ -990,7 +1149,7 @@ echo -e "${C}──────────────────────�
 echo -ne " ${W}► Opcion :   ${N}"; read opcion
 case $opcion in
 1) menu_usuarios ;;
-2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
+2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e "${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
 3|4|5|8) menu_protocolos ;;
 6) configurar_banner ;;
 7) configurar_colores ;;
