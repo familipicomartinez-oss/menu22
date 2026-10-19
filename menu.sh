@@ -765,7 +765,6 @@ apt-get install -y curl wget coreutils lsof psmisc >/dev/null 2>&1
 mkdir -p /usr/bin
 rm -f /usr/bin/badvpn-udpgw
 
-# 1. Intenta primero desde TU PROPIO repositorio personal de GitHub (familipicomartinez-oss)
 curl -4 -fsSL --connect-timeout 8 --max-time 20 "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/badvpn-udpgw" -o /usr/bin/badvpn-udpgw 2>/dev/null
 TAM_B=$(wc -c < /usr/bin/badvpn-udpgw 2>/dev/null || echo 0)
 if [ "$TAM_B" -gt 50000 ]; then
@@ -777,7 +776,6 @@ else
     rm -f /usr/bin/badvpn-udpgw
 fi
 
-# 2. Compilación 100% Oficial en Lenguaje C desde el código fuente original (Funciona en TODOS los Ubuntu y Debian)
 if [ ! -x /usr/bin/badvpn-udpgw ]; then
     echo -e " ${A}⚙️ Compilando motor BadVPN propio directamente en tu sistema...   ${N}"
     apt-get install -y cmake build-essential gcc g++ make git >/dev/null 2>&1
@@ -1579,26 +1577,241 @@ esac
 done
 }
 
+menu_bot() {
+while true; do
+    clear
+    ESTADO_BOT=$(systemctl is-active --quiet zeroday-bot && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
+    echo -e "${C}================================================${N}"
+    echo -e "     ${A}🤖 GESTOR BOT TELEGRAM (KEYS) | ZeroDay 🤖   ${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " ${W}Estado del Bot :${N} $ESTADO_BOT"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -e " ${V}[1]${N} ${W}🟢 Instalar y Encender Bot (MongoDB)   ${N}"
+    echo -e " ${A}[2]${N} ${W}⏸️  Detener Bot   ${N}"
+    echo -e " ${V}[3]${N} ${W}▶️  Iniciar Bot   ${N}"
+    echo -e " ${C}[4]${N} ${W}📋 Ver Registro (Log) del Bot   ${N}"
+    echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Bot   ${N}"
+    echo -e " ${C}[0]${N} ${W}↩️  REGRESAR AL MENÚ   ${N}"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -ne " ${W}► Opción :   ${N}"; read op_bot
+
+    case $op_bot in
+        1)
+            clear
+            echo -e "${C}================================================${N}"
+            echo -e " ${V}⏳ Instalando dependencias de Python y Mongo...   ${N}"
+            apt-get update -y >/dev/null 2>&1
+            apt-get install python3 python3-pip -y >/dev/null 2>&1
+            echo -e " ${W}Esto puede tomar unos segundos...   ${N}"
+            pip3 install pyTelegramBotAPI pymongo --break-system-packages >/dev/null 2>&1 || pip3 install pyTelegramBotAPI pymongo >/dev/null 2>&1
+            
+            mkdir -p /etc/zeroday_bot
+            echo -e " ${A}⚙️ Escribiendo el cerebro del Bot con tus Keys...   ${N}"
+            
+            cat << 'EOF_BOT' > /etc/zeroday_bot/bot.py
+import telebot
+from pymongo import MongoClient
+import subprocess
+import random
+import string
+import os
+from datetime import datetime, timedelta
+
+# CREDENCIALES AUTOMATICAS ZERODAY
+TOKEN = "8850791872:AAGGT83B_jnHTzmCf_uZVoMbHvgQov7RBHo"
+MONGO_URI = "mongodb+srv://martinoswaldo01_db_user:nlcZvCf5uxcBuRKr@cluster0.1hzsh2n.mongodb.net/?retryWrites=true&w=majority"
+ADMIN_SECRETO = "zerodayadmin"
+
+try:
+    bot = telebot.TeleBot(TOKEN)
+    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
+    db = client['zeroday_vpn']
+    keys_collection = db['keys']
+    admins_collection = db['admins']
+except Exception as e:
+    print("Error conectando a Mongo o Telegram:", e)
+    exit(1)
+
+def is_admin(chat_id):
+    return admins_collection.find_one({"chat_id": chat_id, "role": "admin"}) is not None
+
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
+    texto = (
+        "🚀 *Bienvenido al Bot ZeroDay* 🚀\n\n"
+        "Para activar una cuenta SSH usa el formato:\n"
+        "`/usar <TU_KEY> <usuario> <contraseña>`\n\n"
+        "Ejemplo:\n`/usar ZD-1234 juan 123456`"
+    )
+    bot.reply_to(message, texto, parse_mode="Markdown")
+
+@bot.message_handler(commands=['setadmin'])
+def set_admin(message):
+    args = message.text.split()
+    if len(args) == 2 and args[1] == ADMIN_SECRETO:
+        admins_collection.update_one({"chat_id": message.chat.id}, {"$set": {"role": "admin"}}, upsert=True)
+        bot.reply_to(message, "✅ *¡Felicidades!* Ahora eres el Dueño Administrador del Bot. Puedes crear llaves con /gen.", parse_mode="Markdown")
+    else:
+        bot.reply_to(message, "❌ Código secreto incorrecto o formato inválido.")
+
+@bot.message_handler(commands=['gen'])
+def gen_key(message):
+    if not is_admin(message.chat.id):
+        bot.reply_to(message, "⛔ Cuidado: No tienes permisos para crear llaves.")
+        return
+    
+    args = message.text.split()
+    if len(args) != 3:
+        bot.reply_to(message, "Uso: `/gen <dias> <limite_conexiones>`\nEjemplo: `/gen 30 2`", parse_mode="Markdown")
+        return
+    
+    try:
+        dias = int(args[1])
+        limite = int(args[2])
+        key = "ZD-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
+        keys_collection.insert_one({
+            "key": key,
+            "dias": dias,
+            "limite": limite,
+            "usada": False,
+            "creada": datetime.now()
+        })
+        bot.reply_to(message, f"✅ *Key Generada con Éxito*\n\n🔑 Key: `{key}`\n⏳ Días: {dias}\n📈 Conexiones: {limite}\n\nEnvía esta Key a tu cliente para que use el comando /usar", parse_mode="Markdown")
+    except ValueError:
+        bot.reply_to(message, "❌ Días y límite deben ser números enteros.")
+
+@bot.message_handler(commands=['usar'])
+def usar_key(message):
+    args = message.text.split()
+    if len(args) != 4:
+        bot.reply_to(message, "Uso correcto:\n`/usar <KEY> <usuario> <contraseña>`", parse_mode="Markdown")
+        return
+    
+    key_input = args[1]
+    user_ssh = args[2]
+    pass_ssh = args[3]
+    
+    # Buscar en MongoDB
+    key_data = keys_collection.find_one({"key": key_input})
+    
+    if not key_data:
+        bot.reply_to(message, "❌ La Key ingresada no existe.")
+        return
+    if key_data.get("usada"):
+        bot.reply_to(message, "❌ Esta Key ya fue utilizada por otra persona.")
+        return
+    
+    # Verificar si el nombre de usuario ya existe en Linux
+    check_user = subprocess.run(["id", user_ssh], capture_output=True)
+    if check_user.returncode == 0:
+        bot.reply_to(message, "❌ Ese nombre de usuario ya está registrado. Por favor intenta de nuevo con un nombre distinto.")
+        return
+        
+    dias = key_data["dias"]
+    limite = key_data["limite"]
+    
+    try:
+        # Crear usuario nativo en el VPS
+        subprocess.run(["useradd", "-m", "-s", "/bin/bash", user_ssh])
+        
+        # Ponerle la contraseña
+        proc = subprocess.Popen(['chpasswd'], stdin=subprocess.PIPE)
+        proc.communicate(input=f"{user_ssh}:{pass_ssh}".encode('utf-8'))
+        
+        # Ponerle fecha de caducidad
+        date_exp = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
+        subprocess.run(["chage", "-E", date_exp, user_ssh])
+        
+        # Fijar limite de conexiones simultaneas
+        os.makedirs("/etc/vps_limites", exist_ok=True)
+        with open(f"/etc/vps_limites/{user_ssh}", "w") as f:
+            f.write(str(limite))
+            
+        # Marcar la Key como gastada en MongoDB
+        keys_collection.update_one({"_id": key_data["_id"]}, {"$set": {"usada": True, "user_ssh": user_ssh}})
+        
+        # Instalar bloqueador de multi-login si no existe
+        if not os.path.exists("/usr/local/bin/monitor_limites.sh"):
+            monitor_code = "#!/bin/bash\nfor user in $(ls /etc/vps_limites/ 2>/dev/null); do\nlimite=$(cat /etc/vps_limites/$user)\nconex=$(ps -u$user 2>/dev/null | grep -c sshd)\nif [ \"$conex\" -gt \"$limite\" ]; then\npkill -u $user sshd\nfi\ndone\n"
+            with open("/usr/local/bin/monitor_limites.sh", "w") as m:
+                m.write(monitor_code)
+            os.chmod("/usr/local/bin/monitor_limites.sh", 0o755)
+            os.system("(crontab -l 2>/dev/null | grep -v 'monitor_limites.sh'; echo '* * * * * /usr/local/bin/monitor_limites.sh') | crontab -")
+
+        bot.reply_to(message, f"✅ *¡Cuenta Creada Exitosamente en el Servidor!*\n\n👤 Usuario: `{user_ssh}`\n🔑 Clave: `{pass_ssh}`\n⏳ Válida hasta: {date_exp}\n📈 Límite: {limite} dispositivos", parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ocurrió un error al crear la cuenta en el VPS. Intenta de nuevo más tarde.")
+
+bot.infinity_polling()
+EOF_BOT
+            
+            echo -e " ${V}🛡️ Configurando servicio en segundo plano...   ${N}"
+            cat << 'EOF_SRV' > /etc/systemd/system/zeroday-bot.service
+[Unit]
+Description=ZeroDay Telegram Bot (Key Manager)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/zeroday_bot
+ExecStart=/usr/bin/python3 /etc/zeroday_bot/bot.py
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF_SRV
+            systemctl daemon-reload
+            systemctl enable zeroday-bot >/dev/null 2>&1
+            systemctl restart zeroday-bot
+            sleep 2
+            if systemctl is-active --quiet zeroday-bot; then
+                echo -e "\n ${V}¡EL BOT FUE INSTALADO Y ESTÁ CORRIENDO EN SEGUNDO PLANO!   ${N}"
+                echo -e " ${C}================================================${N}"
+                echo -e " ${W}Ve a Telegram ahora mismo y envíale a tu bot esto:  ${N}"
+                echo -e " ${A}/setadmin zerodayadmin${N}"
+                echo -e " ${W}Para darte permisos de creador de llaves.${N}"
+                echo -e " ${C}================================================${N}"
+            else
+                echo -e "\n ${R}Hubo un error al iniciar el Bot. Usa la opción 4 para ver logs.   ${N}"
+            fi
+            echo -ne " ${W}► Enter para continuar...   ${N}"; read
+            ;;
+        2) systemctl stop zeroday-bot; echo -e " ${A}Bot Detenido.${N}"; read -p " Enter..." ;;
+        3) systemctl start zeroday-bot; echo -e " ${V}Bot Iniciado.${N}"; read -p " Enter..." ;;
+        4) clear; echo -e "${A}=== REGISTRO DEL BOT EN VIVO ===${N}"; journalctl -u zeroday-bot -n 30 --no-pager; echo -ne "\n ${W}► Enter para regresar...   ${N}"; read ;;
+        5) systemctl stop zeroday-bot >/dev/null 2>&1; systemctl disable zeroday-bot >/dev/null 2>&1; rm -rf /etc/zeroday_bot /etc/systemd/system/zeroday-bot.service; systemctl daemon-reload; echo -e " ${R}Bot Desinstalado por completo.${N}"; read -p " Enter..." ;;
+        0) break ;;
+    esac
+done
+}
+
 while true; do
 clear
 info_sistema
-echo -e " ${V}[01]${N} ${W}⇨ CONTROL USUARIOS (SSH/SSL/VMESS)   ${N}"
-echo -e " ${V}[02]${N} ${W}⇨ [!] OPTIMIZAR VPS      [  ${N}${R}OFF${N}${W}]   ${N}"
-echo -e " ${V}[03]${N} ${W}⇨ CONTADOR ONLINE USERS  [  ${N}${R}OFF${N}${W}]   ${N}"
-echo -e " ${V}[04]${N} ${W}⇨ AUTOINICIAR SCRIPT     [  ${N}${R}OFF${N}${W}]   ${N}"
-echo -e " ${V}[05]${N} ${W}⇨ INSTALADOR DE PROTOCOLOS   ${N}"
-echo -e " ${V}[06]${N} ${W}⇨ 📝 CONFIGURAR BANNER (MENSAJE)   ${N}"
-echo -e " ${V}[07]${N} ${W}⇨ 🎨 CAMBIAR COLORES DEL MENU   ${N}"
+echo -e " ${V}[01]${N}${W}⇨ CONTROL USUARIOS (SSH/SSL/VMESS)   ${N}"
+echo -e " ${V}[02]${N} ${W}⇨ [!] OPTIMIZAR VPS      [${N}${R}OFF${N}${W}]${N}"
+echo -e " ${V}[03]${N}${W}⇨ CONTADOR ONLINE USERS  [  ${N}${R}OFF${N}${W}]${N}"
+echo -e " ${V}[04]${N}${W}⇨ AUTOINICIAR SCRIPT     [  ${N}${R}OFF${N}${W}]${N}"
+echo -e " ${V}[05]${N}${W}⇨ INSTALADOR DE PROTOCOLOS   ${N}"
+echo -e " ${V}[06]${N}${W}⇨ 📝 CONFIGURAR BANNER (MENSAJE)   ${N}"
+echo -e " ${V}[07]${N}${W}⇨ 🎨 CAMBIAR COLORES DEL MENU   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${V}[08]${N} ${W}⇨ [!] UPDATE / REMOVE   |  ${V}[0]${N} ${W}⇨ [ SALIR ]   ${N}"
+echo -e " ${V}[08]${N} ${W}⇨ [!] UPDATE / REMOVE${N}"
+echo -e " ${V}[09]${N}${W}⇨ 🤖 GESTOR BOT TELEGRAM (KEYS)   ${N}"
+echo -e " ${V}[0]${N}  ${W}⇨ [ SALIR ]${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -ne " ${W}► Opcion :   ${N}"; read opcion
 case $opcion in
 1) menu_usuarios ;;
-2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
+2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall Activo.${N}"; echo -ne " ${W}Enter para continuar...${N}"; read ;;
 3|4|5|8) menu_protocolos ;;
 6) configurar_banner ;;
 7) configurar_colores ;;
+9) menu_bot ;;
 0) exit 0 ;;
 *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
 esac
