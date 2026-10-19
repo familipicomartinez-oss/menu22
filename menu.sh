@@ -753,48 +753,40 @@ echo -ne " ${W}► Opcion :   ${N}"; read op_badvpn
 case $op_badvpn in
 1)
 clear
-echo -e "${C}=== INSTALACIÓN NATIVA BADVPN ===   ${N}"
+echo -e "${C}=== INSTALACIÓN NATIVA BADVPN (ZERO-DEPENDENCIAS) ===   ${N}"
 systemctl stop badvpn7200 2>/dev/null
 systemctl stop badvpn7300 2>/dev/null
 killall -9 badvpn-udpgw 2>/dev/null
 
-echo -e " ${V}⏳ Preparando entorno para Ubuntu / Debian...   ${N}"
+echo -e " ${V}⏳ Preparando entorno oficial para Ubuntu / Debian...   ${N}"
 apt-get update -y >/dev/null 2>&1
 apt-get install -y curl wget coreutils lsof psmisc >/dev/null 2>&1
 
 mkdir -p /usr/bin
 rm -f /usr/bin/badvpn-udpgw
 
-# CAPA 1: Descarga verificada desde múltiples espejos binarios
-MIRRORS_BAD=(
-    "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/badvpn-udpgw"
-    "https://raw.githubusercontent.com/ChumoGH/ADMcgh/master/Plugins/Badvpn/badvpn-udpgw"
-    "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Utils/badvpn-udpgw"
-    "https://raw.githubusercontent.com/powermx/badvpn/master/badvpn-udpgw"
-    "https://github.com/ambrop72/badvpn/releases/download/1.999.130/badvpn-udpgw"
-)
-
-for url_b in "${MIRRORS_BAD[@]}"; do
-    curl -4 -fsSL --connect-timeout 8 --max-time 25 "$url_b" -o /usr/bin/badvpn-udpgw 2>/dev/null
-    TAM_B=$(wc -c < /usr/bin/badvpn-udpgw 2>/dev/null || echo 0)
-    if [ "$TAM_B" -gt 50000 ]; then
-        chmod +x /usr/bin/badvpn-udpgw 2>/dev/null
-        if /usr/bin/badvpn-udpgw --version >/dev/null 2>&1 || /usr/bin/badvpn-udpgw --help >/dev/null 2>&1; then
-            break
-        fi
+# 1. Intenta primero desde TU PROPIO repositorio personal de GitHub (familipicomartinez-oss)
+curl -4 -fsSL --connect-timeout 8 --max-time 20 "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/badvpn-udpgw" -o /usr/bin/badvpn-udpgw 2>/dev/null
+TAM_B=$(wc -c < /usr/bin/badvpn-udpgw 2>/dev/null || echo 0)
+if [ "$TAM_B" -gt 50000 ]; then
+    chmod +x /usr/bin/badvpn-udpgw 2>/dev/null
+    if ! /usr/bin/badvpn-udpgw --version >/dev/null 2>&1 && ! /usr/bin/badvpn-udpgw --help >/dev/null 2>&1; then
+        rm -f /usr/bin/badvpn-udpgw
     fi
+else
     rm -f /usr/bin/badvpn-udpgw
-done
+fi
 
-# CAPA 2: Compilación nativa C/C++ si fallan los espejos o si es otra arquitectura (100% Ubuntu & Debian)
+# 2. Compilación 100% Oficial en Lenguaje C desde el código fuente original (Funciona en TODOS los Ubuntu y Debian)
 if [ ! -x /usr/bin/badvpn-udpgw ]; then
-    echo -e " ${A}⚙️ Compilando binario nativo BadVPN para tu sistema (Ubuntu/Debian)...   ${N}"
+    echo -e " ${A}⚙️ Compilando motor BadVPN propio directamente en tu sistema...   ${N}"
     apt-get install -y cmake build-essential gcc g++ make git >/dev/null 2>&1
     rm -rf /tmp/badvpn_src
     git clone --depth 1 -q https://github.com/ambrop72/badvpn.git /tmp/badvpn_src 2>/dev/null
     if [ -d /tmp/badvpn_src ]; then
         mkdir -p /tmp/badvpn_src/build
         cd /tmp/badvpn_src/build || true
+        cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 -DCMAKE_POLICY_VERSION_MINIMUM=3.5 -Wno-dev >/dev/null 2>&1 || \
         cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 >/dev/null 2>&1
         make -j$(nproc) >/dev/null 2>&1
         if [ -f /tmp/badvpn_src/build/udpgw/badvpn-udpgw ]; then
@@ -825,7 +817,7 @@ if [ -x /usr/bin/badvpn-udpgw ]; then
         echo -e " ${R}Fallo al encender el servicio. Revisa los permisos del sistema.   ${N}"
     fi
 else
-    echo -e "\n ${R}ERROR CRÍTICO: No se pudo descargar ni compilar BadVPN. Verifica tu conexión a internet.   ${N}"
+    echo -e "\n ${R}ERROR CRÍTICO: No se pudo compilar BadVPN. Verifica tu conexión a internet.   ${N}"
 fi
 echo -ne " ${W}► Enter para continuar...   ${N}"; read ;;
 2)
@@ -1276,10 +1268,6 @@ instalar_slowdns() {
     echo -e " ${V}⏳ Descargando motor DNSTT...   ${N}"
     MIRRORS_DNS=(
         "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/dnstt-server"
-        "https://raw.githubusercontent.com/ChumoGH/ADMcgh/master/Plugins/SlowDNS/dnstt-server"
-        "https://raw.githubusercontent.com/rudi9999/ADMRufu/main/Utils/SlowDNS/dnstt-server"
-        "https://raw.githubusercontent.com/aleskxyz/dnstt/master/dnstt-server"
-        "https://raw.githubusercontent.com/fisabiliyusri/Mantap/main/slowdns/dnstt-server"
     )
 
     DESCARGA_DNS=0
@@ -1297,7 +1285,7 @@ instalar_slowdns() {
     done
 
     if [ "$DESCARGA_DNS" -eq 0 ]; then
-        echo -e " ${A}⚙️ Compilando motor DNSTT (15s)...   ${N}"
+        echo -e " ${A}⚙️ Compilando motor DNSTT oficial (15s)...   ${N}"
         apt-get install golang-go git -y > /dev/null 2>&1
         rm -rf /tmp/dnstt_src
         git clone -q https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt_src 2>/dev/null || git clone -q https://repo.or.cz/dnstt.git /tmp/dnstt_src 2>/dev/null
