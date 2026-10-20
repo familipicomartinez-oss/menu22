@@ -1,5 +1,14 @@
 #!/bin/bash
 
+# ==========================================
+# COMPATIBILIDAD UNIVERSAL UBUNTU & DEBIAN
+# ==========================================
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
+export DEBIAN_FRONTEND=noninteractive
+
+# Asegurar archivo de registro para comando 'last' en Debian 12 / Ubuntu 24.04+
+[ ! -f /var/log/wtmp ] && touch /var/log/wtmp 2>/dev/null
+
 # Limpieza automatica de cualquier rastro previo del bot en segundo plano
 if [ -f /etc/systemd/system/zeroday-bot.service ] || [ -d /etc/zeroday_bot ]; then
     systemctl stop zeroday-bot >/dev/null 2>&1
@@ -19,18 +28,20 @@ if [ -f /etc/zeroday_tema.conf ]; then
     source /etc/zeroday_tema.conf
 fi
 
-IP_VPS=$(hostname -I | awk '{print $1}'); [ -z "$IP_VPS" ] && IP_VPS="Desconocida"
+IP_VPS=$(hostname -I 2>/dev/null | awk '{print $1}')
+[ -z "$IP_VPS" ] && IP_VPS=$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null || echo "Desconocida")
 es() { systemctl is-active --quiet $1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
-ep() { ss -tlnp | grep -q ":$1 " > /dev/null 2>&1 || ss -ulnp | grep -q ":$1 " > /dev/null 2>&1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
+ep() { ss -tlnp 2>/dev/null | grep -q ":$1 " || ss -ulnp 2>/dev/null | grep -q ":$1 " && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 
 info_sistema() {
 MEM_TOTAL=$(free -m | awk '/Mem:/ {print $2}')
 MEM_USADA=$(free -m | awk '/Mem:/ {print $3}')
 LIBRE_RAM=$(free -m | awk '/Mem:/ {print $4}')
+[ -z "$MEM_TOTAL" ] || [ "$MEM_TOTAL" -eq 0 ] && MEM_TOTAL=512
 PORCENT_RAM=$(( (MEM_USADA * 100) / MEM_TOTAL ))
-S_OS=$(grep -oP '(?<=PRETTY_NAME=")[^"]+' /etc/os-release 2>/dev/null || echo "Ubuntu Linux")
+S_OS=$(grep -oP '(?<=PRETTY_NAME=")[^"]+' /etc/os-release 2>/dev/null || echo "Linux VPS")
 S_ARCH=$(uname -m)
-S_CPU=$(nproc)
+S_CPU=$(nproc 2>/dev/null || echo 1)
 FECHA_ACT=$(date +'%d/%m/%Y-%H:%M')
 STR_PORTS=""
 C_PORT=0
@@ -51,12 +62,12 @@ agregar_puerto() {
     fi
 }
 
-ss -tlnp | grep -q ":22 " && agregar_puerto "🔹 SSH: ${V}22${N}"
+ss -tlnp 2>/dev/null | grep -q ":22 " && agregar_puerto "🔹 SSH: ${V}22${N}"
 
 # V2RAY Dinámico
 if [ -f /usr/local/etc/xray/puerto.txt ]; then
     PT_V2=$(cat /usr/local/etc/xray/puerto.txt)
-    if ss -tlnp | grep -q ":$PT_V2 "; then
+    if ss -tlnp 2>/dev/null | grep -q ":$PT_V2 "; then
         agregar_puerto "🔹 V2RAY: ${V}$PT_V2${N}"
     fi
 fi
@@ -64,7 +75,7 @@ fi
 # SHADOWSOCKS-R Dinámico
 if [ -f /etc/ssr/puerto.txt ]; then
     PT_SSR=$(cat /etc/ssr/puerto.txt)
-    if ss -tlnp | grep -q ":$PT_SSR "; then
+    if ss -tlnp 2>/dev/null | grep -q ":$PT_SSR "; then
         agregar_puerto "🔹 SSR: ${V}$PT_SSR${N}"
     fi
 fi
@@ -72,7 +83,7 @@ fi
 # PROXY PYTHON Dinámico
 if [ -f /etc/proxy.py ]; then
     PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )')
-    if [ -n "$PT_PY" ] && ss -tlnp | grep -q ":$PT_PY "; then
+    if [ -n "$PT_PY" ] && ss -tlnp 2>/dev/null | grep -q ":$PT_PY "; then
          agregar_puerto "🔹 PROXY: ${V}$PT_PY${N}"
     fi
 fi
@@ -80,20 +91,20 @@ fi
 # SSL STUNNEL Dinámico
 if [ -f /etc/stunnel/stunnel.conf ]; then
     for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' '); do
-        if ss -tlnp | grep -q ":$p_ssl "; then
+        if ss -tlnp 2>/dev/null | grep -q ":$p_ssl "; then
             agregar_puerto "🔹 SSL: ${V}$p_ssl${N}"
         fi
     done
 fi
 
-ss -ulnp | grep -q ":36712 " && agregar_puerto "🔹 UDP: ${V}36712${N}"
-ss -ulnp | grep -q ":5300 " && agregar_puerto "🔹 SlowDNS: ${V}5300${N}"
-ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
-ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
+ss -ulnp 2>/dev/null | grep -q ":36712 " && agregar_puerto "🔹 UDP: ${V}36712${N}"
+ss -ulnp 2>/dev/null | grep -q ":5300 " && agregar_puerto "🔹 SlowDNS: ${V}5300${N}"
+ss -tlnp 2>/dev/null | grep -q ":7300" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
+ss -tlnp 2>/dev/null | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
 
 if [ -f /etc/hcr/config ]; then
     source /etc/hcr/config
-    if ss -tlnp | grep -qw "$P_INJ"; then
+    if ss -tlnp 2>/dev/null | grep -qw "$P_INJ"; then
         agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
     else
         agregar_puerto "🔹 HCR: ${R}CERRADO ($P_INJ)${N}"
@@ -143,17 +154,17 @@ ver_usuarios_online() {
             conex=$(ps -u "$user" 2>/dev/null | grep -c sshd)
             
             if [ "$conex" -gt 0 ]; then
-                INFO_CON=$(who | grep "^$user " | head -n 1)
+                INFO_CON=$(who 2>/dev/null | grep "^$user " | head -n 1)
                 if [ -n "$INFO_CON" ]; then
                     HORA=$(echo "$INFO_CON" | awk '{print $4}')
                     IP_CLI=$(echo "$INFO_CON" | awk '{print $5}' | tr -d '()')
                 else
                     HORA="Activo"
-                    IP_CLI="Oculta"
+                    IP_CLI="Túnel"
                 fi
                 echo -e " 👤  ${W}$user  ${N}-> ${V}[ ONLINE ]  ${N}${W}(Conex: $conex/$limite | Desde: $HORA | IP: $IP_CLI)   ${N}"
             else
-                ULTIMA=$(last -n 1 "$user" | head -n 1)
+                ULTIMA=$(last -n 1 "$user" 2>/dev/null | head -n 1)
                 if [[ "$ULTIMA" == *"wtmp begins"* ]] || [[ -z "$ULTIMA" ]]; then
                     echo -e " 👤  ${W}$user  ${N}-> ${R}[ OFFLINE ]  ${N}${W}(Límite: $limite | Nunca se ha conectado)   ${N}"
                 else
@@ -199,6 +210,14 @@ d=${d:-30}
 echo -ne " ${W}► Límite de conexiones [Default: 1]:   ${N}"; read l
 l=${l:-1}
 
+# Asegurar que SSH permita contraseñas en cualquier plantilla Ubuntu/Debian
+if [ -f /etc/ssh/sshd_config ]; then
+    sed -i 's/^#*PasswordAuthentication .*/PasswordAuthentication yes/g' /etc/ssh/sshd_config 2>/dev/null
+    grep -q "^PasswordAuthentication yes" /etc/ssh/sshd_config || echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
+    sed -i 's/^#*PasswordAuthentication .*/PasswordAuthentication yes/g' /etc/ssh/sshd_config.d/*.conf 2>/dev/null
+    systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1
+fi
+
 id "$u" >/dev/null 2>&1 || useradd -m -s /bin/bash "$u" 2>/dev/null
 echo "$u:$p" | chpasswd 2>/dev/null
 chage -E $(date -d "+$d days" +%Y-%m-%d) "$u" 2>/dev/null || true
@@ -207,6 +226,7 @@ echo "$l" > "/etc/vps_limites/$u"
 if [ ! -f /usr/local/bin/monitor_limites.sh ]; then
 cat << 'EOF_MONITOR' > /usr/local/bin/monitor_limites.sh
 #!/bin/bash
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 for user in $(ls /etc/vps_limites/ 2>/dev/null); do
 limite=$(cat /etc/vps_limites/$user)
 conex=$(ps -u $user 2>/dev/null | grep -c sshd)
@@ -216,6 +236,8 @@ fi
 done
 EOF_MONITOR
 chmod +x /usr/local/bin/monitor_limites.sh
+command -v crontab >/dev/null 2>&1 || apt-get install -y cron >/dev/null 2>&1
+systemctl enable cron >/dev/null 2>&1; systemctl start cron >/dev/null 2>&1
 (crontab -l 2>/dev/null | grep -v "monitor_limites.sh"; echo "* * * * * /usr/local/bin/monitor_limites.sh") | crontab -
 fi
 if ! command -v figlet > /dev/null 2>&1; then
@@ -231,15 +253,15 @@ fi
 echo -e " ${W}* Puertas Activas en su Servidor *   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 STR_P=""
-ss -tlnp | grep -q ":22 " && STR_P+="${W}🔹 SSH:  ${V}22${N}   "
-if ss -tlnp | grep -q ":80 "; then
+ss -tlnp 2>/dev/null | grep -q ":22 " && STR_P+="${W}🔹 SSH:  ${V}22${N}   "
+if ss -tlnp 2>/dev/null | grep -q ":80 "; then
     systemctl is-active --quiet xray && grep -q '"port": 80' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="${W}🔹 V2RAY:  ${V}80${N}   " || STR_P+="${W}🔹 PROXY:  ${V}80${N}   "
 fi
-if ss -tlnp | grep -q ":443 "; then
+if ss -tlnp 2>/dev/null | grep -q ":443 "; then
     systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="${W}🔹 V2RAY:  ${V}443${N}   " || STR_P+="${W}🔹 SSL:  ${V}443${N}   "
 fi
-ss -ulnp | grep -q ":36712" && STR_P+="${W}🔹 UDP:  ${V}36712${N}   "
-ss -ulnp | grep -q ":5300" && STR_P+="${W}🔹 SlowDNS:  ${V}5300${N}   "
+ss -ulnp 2>/dev/null | grep -q ":36712" && STR_P+="${W}🔹 UDP:  ${V}36712${N}   "
+ss -ulnp 2>/dev/null | grep -q ":5300" && STR_P+="${W}🔹 SlowDNS:  ${V}5300${N}   "
 [ -z "$STR_P" ] && STR_P="${W}🔹  ${R}Sin puertos configurados   ${N}"
 echo -e " $STR_P"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
@@ -260,7 +282,7 @@ echo -e " ${R}  usuario si supera el límite de $l conexiones.   ${N}"
 echo -e "${C}================================================${N}"
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
-2) echo -ne " ${W}► Usuario a eliminar:   ${N}"; read u; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"; read -p " Enter..." ;;
+2) echo -ne " ${W}► Usuario a eliminar:   ${N}"; read u; pkill -u "$u" 2>/dev/null; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"; read -p " Enter..." ;;
 3) awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd; read -p " Enter..." ;;
 4) ver_usuarios_online ;;
 0) break ;;
@@ -286,11 +308,50 @@ case $op_ssl in
 1)
 p1=22
 echo -ne " ${W}► Puerto externo SSL a elegir (Ej: 443, 444):   ${N}"; read p2; p2=${p2:-443}
-apt-get install stunnel4 openssl -y >/dev/null 2>&1
+apt-get update -y >/dev/null 2>&1
+apt-get install stunnel4 openssl psmisc lsof -y >/dev/null 2>&1
+mkdir -p /etc/stunnel /var/run/stunnel4
 openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=ZeroDay/O=VPN/C=CO" >/dev/null 2>&1
-echo -e "pid = /var/run/stunnel4.pid\ncert = /etc/stunnel/stunnel.pem\nclient = no\nsocket = a:SO_REUSEADDR=1\nsocket = l:TCP_NODELAY=1\nsocket = r:TCP_NODELAY=1\n[stunnel-custom]\naccept = $p2\nconnect = 127.0.0.1:$p1" > /etc/stunnel/stunnel.conf
+chmod 600 /etc/stunnel/stunnel.pem
+
+cat <<EOF > /etc/stunnel/stunnel.conf
+pid = /var/run/stunnel4/stunnel4.pid
+cert = /etc/stunnel/stunnel.pem
+client = no
+socket = a:SO_REUSEADDR=1
+socket = l:TCP_NODELAY=1
+socket = r:TCP_NODELAY=1
+[stunnel-custom]
+accept = $p2
+connect = 127.0.0.1:$p1
+EOF
+
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
+
+# Servicio SystemD directo compatible con todas las versiones de Debian y Ubuntu
+cat << 'EOF_STUNNEL_SVC' > /etc/systemd/system/stunnel4.service
+[Unit]
+Description=SSL Tunnel (ZeroDay)
+After=network.target
+
+[Service]
+Type=forking
+RuntimeDirectory=stunnel4
+PIDFile=/var/run/stunnel4/stunnel4.pid
+ExecStartPre=-/bin/mkdir -p /var/run/stunnel4
+ExecStart=/usr/bin/stunnel4 /etc/stunnel/stunnel.conf
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF_STUNNEL_SVC
+
+fuser -k -9 $p2/tcp >/dev/null 2>&1
+iptables -I INPUT -p tcp --dport $p2 -j ACCEPT 2>/dev/null
 ufw allow $p2/tcp >/dev/null 2>&1
+systemctl daemon-reload
+systemctl enable stunnel4 >/dev/null 2>&1
 systemctl restart stunnel4
 echo -e " ${V}¡SSL instalado y activo en puerto externo $p2!   ${N}"
 read -p " Enter..." ;;
@@ -307,6 +368,7 @@ if [ -z "$p_ext" ]; then
     echo -e " ${R}Cancelado.  ${N}"; read -p " Enter..."; continue
 fi
 echo -e "\n[stunnel-extra-$p_ext]\naccept = $p_ext\nconnect = 127.0.0.1:$p_int" >> /etc/stunnel/stunnel.conf
+iptables -I INPUT -p tcp --dport $p_ext -j ACCEPT 2>/dev/null
 ufw allow $p_ext/tcp >/dev/null 2>&1
 systemctl restart stunnel4
 echo -e "\n ${V}¡Puerto SSL $p_ext adicionado exitosamente y redirigiendo al $p_int!   ${N}"
@@ -349,7 +411,7 @@ fi
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
 4) systemctl stop stunnel4; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-5) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+5) systemctl stop stunnel4; systemctl disable stunnel4 >/dev/null 2>&1; rm -f /etc/systemd/system/stunnel4.service; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; systemctl daemon-reload; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
 0) break ;;
 *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1 ;;
 esac
@@ -540,9 +602,9 @@ EOF
 
 instalar_ssr() {
     configurar_cuenta_ssr
-    echo -e "\n ${V}⏳ Instalando dependencias y librerías C/C++ (libsodium)...   ${N}"
+    echo -e "\n ${V}⏳ Instalando dependencias y librerías C/C++ (libsodium & libssl-dev)...   ${N}"
     apt-get update -y >/dev/null 2>&1
-    apt-get install -y python3 git curl wget libsodium-dev openssl lsof psmisc >/dev/null 2>&1
+    apt-get install -y python3 git curl wget libsodium-dev libssl-dev openssl lsof psmisc >/dev/null 2>&1
 
     rm -rf /usr/local/shadowsocksr
     echo -e " ${V}⏳ Descargando motor oficial ShadowsocksR...   ${N}"
@@ -555,9 +617,10 @@ instalar_ssr() {
         return
     fi
 
-    echo -e " ${V}🔧 Aplicando parches de ingeniería para Ubuntu 24.04/26.04 (OpenSSL 3 & Python 3)...   ${N}"
+    echo -e " ${V}🔧 Aplicando parches para Ubuntu y Debian (OpenSSL 3 & Python 3.12)...   ${N}"
     find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/collections\.MutableMapping/collections.abc.MutableMapping/g' {} + 2>/dev/null
     find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/EVP_CIPHER_CTX_cleanup/EVP_CIPHER_CTX_reset/g' {} + 2>/dev/null
+    find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/time\.clock()/time.perf_counter()/g' {} + 2>/dev/null
 
     cat <<EOF > /etc/systemd/system/ssr-server.service
 [Unit]
@@ -683,10 +746,11 @@ echo -ne " ${W}► Puerto para el WebSocket (Ej: 80):   ${N}"; read pt; pt=${pt:
 echo -e " ${A}Liberando el puerto $pt y preparando Python...   ${N}"
 systemctl stop apache2 nginx dropbear 2>/dev/null
 fuser -k $pt/tcp 2>/dev/null
-apt-get install python3 -y >/dev/null 2>&1
+apt-get install python3 psmisc -y >/dev/null 2>&1
 cat << 'EOF_PY' > /etc/proxy.py
 import socket, threading
 def c(s):
+    d = None
     try:
         s.recv(1024)
         s.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
@@ -699,25 +763,39 @@ def c(s):
                     if not a: break
                     y.sendall(a)
             except: pass
-        threading.Thread(target=f, args=(s, d)).start()
-        threading.Thread(target=f, args=(d, s)).start()
-    except: pass
+            finally:
+                try: x.close()
+                except: pass
+                try: y.close()
+                except: pass
+        t1 = threading.Thread(target=f, args=(s, d), daemon=True)
+        t2 = threading.Thread(target=f, args=(d, s), daemon=True)
+        t1.start(); t2.start()
+    except:
+        try: s.close()
+        except: pass
+        if d:
+            try: d.close()
+            except: pass
 sv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 sv.bind(('0.0.0.0', PUERTO_AQUI))
 sv.listen(100)
 while True:
-    cl, a = sv.accept()
-    threading.Thread(target=c, args=(cl,)).start()
+    try:
+        cl, a = sv.accept()
+        threading.Thread(target=c, args=(cl,), daemon=True).start()
+    except: pass
 EOF_PY
 sed -i "s/PUERTO_AQUI/$pt/g" /etc/proxy.py
-echo -e "[Unit]\nDescription=Proxy Python WS\n[Service]\nExecStart=/usr/bin/python3 /etc/proxy.py\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/proxypy.service
+echo -e "[Unit]\nDescription=Proxy Python WS\nAfter=network.target\n[Service]\nExecStart=/usr/bin/python3 /etc/proxy.py\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/proxypy.service
 systemctl daemon-reload; systemctl enable proxypy >/dev/null 2>&1; systemctl restart proxypy
+iptables -I INPUT -p tcp --dport $pt -j ACCEPT 2>/dev/null
 ufw allow $pt/tcp >/dev/null 2>&1
 echo -e " ${V}¡WebSocket PRO Activo en el puerto $pt!   ${N}"
 read -p " Enter..." ;;
 4) systemctl stop proxypy; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-5) systemctl stop proxypy; rm -f /etc/proxy.py /etc/systemd/system/proxypy.service; systemctl daemon-reload; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+5) systemctl stop proxypy; systemctl disable proxypy >/dev/null 2>&1; rm -f /etc/proxy.py /etc/systemd/system/proxypy.service; systemctl daemon-reload; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
 0) break ;;
 esac
 done
@@ -742,7 +820,7 @@ apt-get install -y iptables curl >/dev/null 2>&1
 curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
 echo -e "{\n  \"listen\": \":36712\",\n  \"stream_buffer\": 33554432,\n  \"receive_buffer\": 8388608,\n  \"auth\": {\n    \"mode\": \"passwords\"\n  }\n}" > /root/udp/config.json
-echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443,7200,7300\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
+echo -e "[Unit]\nDescription=UDP Custom\nAfter=network.target\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443,7200,7300\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
 systemctl daemon-reload; systemctl enable udp-custom >/dev/null 2>&1; systemctl restart udp-custom
 iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null
 iptables -t nat -A PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712
@@ -753,7 +831,7 @@ fi
 echo -e " ${V}¡UDP Custom Instalado y Activo (Puerto 36712)!   ${N}"
 read -p " Enter..." ;;
 2) systemctl stop udp-custom; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-3) systemctl stop udp-custom; rm -rf /usr/bin/udp-custom /root/udp /etc/systemd/system/udp-custom.service; systemctl daemon-reload; iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+3) systemctl stop udp-custom; systemctl disable udp-custom >/dev/null 2>&1; rm -rf /usr/bin/udp-custom /root/udp /etc/systemd/system/udp-custom.service; systemctl daemon-reload; iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
 0) break ;;
 esac
 done
@@ -762,8 +840,8 @@ done
 menu_badvpn() {
 while true; do
 clear
-P_BAD72=$(ss -tlnp | grep -q ":7200" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
-P_BAD73=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+P_BAD72=$(ss -tlnp 2>/dev/null | grep -q ":7200" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+P_BAD73=$(ss -tlnp 2>/dev/null | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 echo -e "${A}--- BADVPN UDP (VIDEOLLAMADAS) ---   ${N}"
 echo -e " ${W}Estado: 7200${N} $P_BAD72 ${W}| 7300${N} $P_BAD73"
 echo -e "${C}----------------------------------------${N}"
@@ -832,7 +910,7 @@ if [ -x /usr/bin/badvpn-udpgw ]; then
     systemctl restart badvpn7200 >/dev/null 2>&1
     
     sleep 2
-    if ss -tlnp | grep -q ":7300"; then
+    if ss -tlnp 2>/dev/null | grep -q ":7300"; then
         echo -e " ${V}¡BadVPN activado exitosamente en los puertos 7200 y 7300!   ${N}"
     else
         echo -e " ${R}Fallo al encender el servicio. Revisa los permisos del sistema.   ${N}"
@@ -889,7 +967,7 @@ case $op_v2 in
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===   ${N}"
     echo -ne " ${W}► Puerto a usar (Recomendado: 443):   ${N}"; read pt_v2; pt_v2=${pt_v2:-443}
     echo -ne " ${W}► Tu Dominio del Servidor (Ej: movistar.zex.digital):   ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
-    UUID=$(uuidgen)
+    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen)
     
     systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
     fuser -k -9 $pt_v2/tcp >/dev/null 2>&1
@@ -899,6 +977,10 @@ case $op_v2 in
     mkdir -p /usr/local/etc/xray
     openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=$dom_v2" >/dev/null 2>&1
     chmod 644 /usr/local/etc/xray/private.key /usr/local/etc/xray/cert.crt
+    
+    # Asegurar que Xray corra como root en Ubuntu/Debian para leer certificados y puertos bajos
+    sed -i 's/User=nobody/User=root/g' /etc/systemd/system/xray.service 2>/dev/null
+    sed -i 's/User=nobody/User=root/g' /etc/systemd/system/xray.service.d/*.conf 2>/dev/null
     
     cat <<EOF > /usr/local/etc/xray/config.json
 {
@@ -931,8 +1013,10 @@ EOF
     echo "$pt_v2" > /usr/local/etc/xray/puerto.txt
     echo "$UUID" > /usr/local/etc/xray/uuid.txt
     
+    systemctl daemon-reload
     systemctl restart xray
     systemctl enable xray >/dev/null 2>&1
+    iptables -I INPUT -p tcp --dport $pt_v2 -j ACCEPT 2>/dev/null
     ufw allow $pt_v2/tcp >/dev/null 2>&1
     
     sleep 2
@@ -946,7 +1030,7 @@ EOF
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; read -p " Enter..."; continue
     fi
-    UUID=$(uuidgen)
+    UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen)
     sed -i -E "s/\"id\": \".*\"/\"id\": \"$UUID\"/" /usr/local/etc/xray/config.json
     echo "$UUID" > /usr/local/etc/xray/uuid.txt
     systemctl restart xray
@@ -971,6 +1055,7 @@ EOF
     
     sed -i -E "s/\"port\": [0-9]+/\"port\": $pt_nuevo/" /usr/local/etc/xray/config.json
     echo "$pt_nuevo" > /usr/local/etc/xray/puerto.txt
+    iptables -I INPUT -p tcp --dport $pt_nuevo -j ACCEPT 2>/dev/null
     ufw allow $pt_nuevo/tcp >/dev/null 2>&1
     systemctl restart xray
     
@@ -1118,7 +1203,7 @@ instalar_hcr() {
 
     echo -e " ${C}Descargando Binario HCR Original...   ${N}"
     rm -f /etc/hcr/hcr-server
-    apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
+    apt-get install curl wget lsof coreutils psmisc -y >/dev/null 2>&1
     
     MIRRORS=(
     "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/hcr-server"
@@ -1175,7 +1260,7 @@ EOF
     ufw allow $p_inj/tcp >/dev/null 2>&1
     
     sleep 3
-    if ss -tlnp | grep -qw "$p_inj"; then
+    if ss -tlnp 2>/dev/null | grep -qw "$p_inj"; then
         echo -e "\n ${V}¡ÉXITO! El motor HCR encendió y el puerto $p_inj está verificado como ABIERTO.   ${N}"
     else
         echo -e "\n ${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.   ${N}"
@@ -1187,7 +1272,7 @@ EOF
 # MOTOR DE REPARACIÓN Y BLINDAJE SLOWDNS
 # ==========================================
 reparar_red_slowdns() {
-    # 1. Liberar puerto 53 de systemd-resolved en Ubuntu 24.04 sin perder DNS
+    # 1. Liberar puerto 53 de systemd-resolved en Ubuntu/Debian sin perder DNS
     if [ -f /etc/systemd/resolved.conf ]; then
         sed -i 's/^#*DNS=.*/DNS=8.8.8.8 1.1.1.1/g' /etc/systemd/resolved.conf 2>/dev/null
         sed -i 's/^#*DNSStubListener=.*/DNSStubListener=no/g' /etc/systemd/resolved.conf 2>/dev/null
@@ -1215,6 +1300,7 @@ EOF_SSH
     # 3. Crear lanzador persistente que blinda IPtables por encima de UDP Custom
     cat << 'EOF_START_DNS' > /etc/slowdns/start_dns.sh
 #!/bin/bash
+export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 DOM_NS=$(tr -d ' \n\r' < /etc/slowdns/ns_domain.txt)
 PT_LOC=$(tr -d ' \n\r' < /etc/slowdns/puerto_local.txt)
 [ -z "$PT_LOC" ] && PT_LOC=22
@@ -1381,7 +1467,6 @@ instalar_slowdns() {
         TAM_DNS=$(wc -c < /etc/slowdns/dnstt-server 2>/dev/null || echo 0)
         if [ "$TAM_DNS" -gt 1000000 ]; then
             chmod +x /etc/slowdns/dnstt-server
-            # Verificación compatible con Go (flag -help devuelve exit 2 pero imprime Usage)
             if /etc/slowdns/dnstt-server -help 2>&1 | grep -qiE "usage|privkey|udp"; then
                 DESCARGA_DNS=1
                 break
@@ -1603,7 +1688,7 @@ menu_protocolos() {
 while true; do
 clear
 P22=$(ep 22); P80=$(es proxypy); PSSL=$(es stunnel4); PPY=$(es proxypy); PUDP=$(es udp-custom); PFB=$(es fail2ban)
-PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+PBAD=$(ss -tlnp 2>/dev/null | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PHCR=$(es hcr-server)
 PDNS=$(es slowdns)
@@ -1644,11 +1729,18 @@ case $op_inst in
 19) menu_udp ;;
 21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo " Bloqueado   "; read -p " Enter..." ;;
 22) menu_badvpn ;;
-24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo " Listo   "; read -p " Enter..." ;;
-26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p " Enter..." ;;
+24) apt-get update -y >/dev/null 2>&1; apt-get install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo " Listo   "; read -p " Enter..." ;;
+26)
+    command -v speedtest-cli >/dev/null 2>&1 || apt-get install -y speedtest-cli python3 >/dev/null 2>&1
+    speedtest-cli 2>/dev/null || curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -
+    read -p " Enter..."
+    ;;
 27) info_sistema; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
-31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
-33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; read -p " Enter..." ;;
+31) systemctl restart ssh sshd stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
+33)
+    command -v ufw >/dev/null 2>&1 || apt-get install -y ufw >/dev/null 2>&1
+    ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; read -p " Enter..."
+    ;;
 34) passwd root; read -p " Enter..." ;;
 37) menu_hcr ;;
 0) break ;;
@@ -1674,7 +1766,12 @@ echo -e "${C}──────────────────────�
 echo -ne " ${W}► Opcion :   ${N}"; read opcion
 case $opcion in
 1) menu_usuarios ;;
-2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall Activo.${N}"; echo -ne " ${W}Enter para continuar...${N}"; read ;;
+2)
+    clear
+    command -v ufw >/dev/null 2>&1 || apt-get install -y ufw >/dev/null 2>&1
+    ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable
+    echo -e " ${V}Firewall Activo.${N}"; echo -ne " ${W}Enter para continuar...${N}"; read
+    ;;
 3|4|5|8) menu_protocolos ;;
 6) configurar_banner ;;
 7) configurar_colores ;;
