@@ -12,128 +12,6 @@ if [ -f /etc/zeroday_tema.conf ]; then
 fi
 
 IP_VPS=$(hostname -I | awk '{print $1}'); [ -z "$IP_VPS" ] && IP_VPS="Desconocida"
-
-# ==========================================
-# CANDADO DE LICENCIA ZERODAY (1 SOLO USO)
-# ==========================================
-verificar_licencia_zeroday() {
-    # Si la VPS ya fue activada legalmente antes, entra directo al menú
-    if [ -f /etc/zeroday_licencia.val ]; then
-        LIC_GUARDADA=$(cat /etc/zeroday_licencia.val 2>/dev/null)
-        if [[ "$LIC_GUARDADA" == ZD-* ]]; then
-            return 0
-        fi
-    fi
-
-    clear
-    echo -e "${C}================================================${N}"
-    echo -e "     ${A}🛡️  INSTALADOR OFICIAL SCRIPT ZERODAY  🛡️${N}"
-    echo -e "${C}================================================${N}"
-    echo -e " ${V}⏳ Preparando paquetes del sistema, espere...${N}"
-    apt-get update -y >/dev/null 2>&1
-    apt-get install -y python3 python3-pip python3-dnspython curl wget >/dev/null 2>&1
-    pip3 install pymongo dnspython requests --break-system-packages >/dev/null 2>&1 || pip3 install pymongo dnspython requests >/dev/null 2>&1
-
-    clear
-    echo -e "${C}================================================${N}"
-    echo -e "     ${A}🔐  VERIFICACIÓN DE LICENCIA ZERODAY  🔐${N}"
-    echo -e "${C}================================================${N}"
-    echo -e " ${W}🔹 IP detectada : ${V}$IP_VPS${N}"
-    echo -e " ${W}🔹 Licencia     : ${A}1 Solo Uso (Única por VPS)${N}"
-    echo -e "${C}────────────────────────────────────────────────${N}"
-    echo -ne " ${W}► Ingrese su Key: ${N}"; read KEY_USER
-    KEY_USER=$(echo "$KEY_USER" | tr -d ' \n\r')
-
-    if [ -z "$KEY_USER" ]; then
-        echo -e "\n ${R}❌ ERROR: No ingresaste ninguna Key.${N}"
-        rm -f "$0" 2>/dev/null
-        exit 1
-    fi
-
-    echo -e "\n ${A}⏳ Verificando Key en el servidor central ZeroDay...${N}"
-
-    cat << 'EOF_VAL' > /tmp/val_zd.py
-import sys
-import urllib.request
-import urllib.parse
-from pymongo import MongoClient
-from datetime import datetime
-
-key_in = sys.argv[1]
-ip_in = sys.argv[2]
-
-MONGO_URI = "mongodb+srv://martinoswaldo01_db_user:nlcZvCf5uxcBuRKr@cluster0.1hzsh2n.mongodb.net/?retryWrites=true&w=majority"
-TOKEN = "8850791872:AAGGT83B_jnHTzmCf_uZVoMbHvgQov7RBHo"
-
-try:
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=8000)
-    db = client['zeroday_vpn']
-    licencias = db['licencias_script']
-    admins = db['admins']
-
-    doc = licencias.find_one({"key": key_in})
-    if not doc:
-        print("INVALIDA")
-        sys.exit(0)
-
-    if doc.get("usada", False) == True:
-        print("USADA")
-        sys.exit(0)
-
-    # Quemar la Key inmediatamente (1 solo uso)
-    fecha_str = datetime.now().strftime("%d/%m/%Y %H:%M:%S")
-    licencias.update_one(
-        {"_id": doc["_id"]},
-        {"$set": {"usada": True, "ip_vps": ip_in, "fecha_uso": fecha_str}}
-    )
-
-    # Notificar al dueño por Telegram
-    for adm in admins.find({"role": "admin"}):
-        cid = adm.get("chat_id")
-        if cid:
-            msg = f"🔔 *¡SCRIPT ZERODAY ACTIVADO!* 🔔\n\n🔑 *Key quemada:* `{key_in}`\n🌐 *IP del VPS:* `{ip_in}`\n📅 *Fecha:* {fecha_str}"
-            url = f"https://api.telegram.org/bot{TOKEN}/sendMessage?chat_id={cid}&text={urllib.parse.quote(msg)}&parse_mode=Markdown"
-            try:
-                urllib.request.urlopen(url, timeout=4)
-            except:
-                pass
-
-    print("OK")
-except Exception as e:
-    print("ERROR_RED")
-EOF_VAL
-
-    RES_VAL=$(python3 /tmp/val_zd.py "$KEY_USER" "$IP_VPS" 2>/dev/null)
-    rm -f /tmp/val_zd.py
-
-    if [ "$RES_VAL" == "OK" ]; then
-        echo "$KEY_USER" > /etc/zeroday_licencia.val
-        chmod 600 /etc/zeroday_licencia.val
-        # Instalar comando 'menu' fijo en el VPS para que el cliente entre siempre escribiendo menu
-        cp -f "$0" /usr/local/bin/menu 2>/dev/null
-        chmod +x /usr/local/bin/menu 2>/dev/null
-        ln -sf /usr/local/bin/menu /usr/bin/menu 2>/dev/null
-        echo -e "\n ${V}✅ ¡KEY VÁLIDA! Licencia activada con éxito para la IP $IP_VPS.${N}"
-        echo -e " ${A}🔥 Esta Key ha sido quemada y ya no podrá usarse en otra VPS.${N}"
-        echo -e " ${W}💡 Tip: Escribe ${V}menu${W} en cualquier momento para abrir el panel.${N}"
-        sleep 3
-    elif [ "$RES_VAL" == "USADA" ]; then
-        echo -e "\n ${R}❌ ACCESO DENEGADO: Esta Key YA FUE UTILIZADA y es de un solo uso.${N}"
-        rm -f "$0" 2>/dev/null
-        exit 1
-    elif [ "$RES_VAL" == "INVALIDA" ]; then
-        echo -e "\n ${R}❌ ACCESO DENEGADO: La Key ingresada NO EXISTE en el sistema ZeroDay.${N}"
-        rm -f "$0" 2>/dev/null
-        exit 1
-    else
-        echo -e "\n ${R}❌ ERROR DE CONEXIÓN: No se pudo conectar con la base de datos de licencias.${N}"
-        echo -e " ${A}Verifica que en MongoDB tengas activado el acceso desde cualquier IP (0.0.0.0/0).${N}"
-        exit 1
-    fi
-}
-
-verificar_licencia_zeroday
-
 es() { systemctl is-active --quiet $1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 ep() { ss -tlnp | grep -q ":$1 " > /dev/null 2>&1 || ss -ulnp | grep -q ":$1 " > /dev/null 2>&1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 
@@ -1717,11 +1595,11 @@ while true; do
     clear
     ESTADO_BOT=$(systemctl is-active --quiet zeroday-bot && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
     echo -e "${C}================================================${N}"
-    echo -e "     ${A}🤖 GESTOR BOT GENERADOR DE KEYS | ZeroDay 🤖   ${N}"
+    echo -e "     ${A}🤖 GESTOR BOT TELEGRAM (KEYS) | ZeroDay 🤖   ${N}"
     echo -e "${C}================================================${N}"
     echo -e " ${W}Estado del Bot :${N} $ESTADO_BOT"
     echo -e "${C}------------------------------------------------${N}"
-    echo -e " ${V}[1]${N} ${W}🟢 Instalar y Encender Bot Generador   ${N}"
+    echo -e " ${V}[1]${N} ${W}🟢 Instalar y Encender Bot (MongoDB)   ${N}"
     echo -e " ${A}[2]${N} ${W}⏸️  Detener Bot   ${N}"
     echo -e " ${V}[3]${N} ${W}▶️  Iniciar Bot   ${N}"
     echo -e " ${C}[4]${N} ${W}📋 Ver Registro (Log) del Bot   ${N}"
@@ -1741,14 +1619,16 @@ while true; do
             pip3 install pyTelegramBotAPI pymongo dnspython --break-system-packages >/dev/null 2>&1 || pip3 install pyTelegramBotAPI pymongo dnspython >/dev/null 2>&1
             
             mkdir -p /etc/zeroday_bot
-            echo -e " ${A}⚙️ Configurando Bot Generador de Licencias (1 Solo Uso)...   ${N}"
+            echo -e " ${A}⚙️ Escribiendo el cerebro del Bot con tus Keys...   ${N}"
             
             cat << 'EOF_BOT' > /etc/zeroday_bot/bot.py
 import telebot
 from pymongo import MongoClient
+import subprocess
 import random
 import string
-from datetime import datetime
+import os
+from datetime import datetime, timedelta
 
 # CREDENCIALES AUTOMATICAS ZERODAY
 TOKEN = "8850791872:AAGGT83B_jnHTzmCf_uZVoMbHvgQov7RBHo"
@@ -1759,91 +1639,123 @@ try:
     bot = telebot.TeleBot(TOKEN)
     client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
     db = client['zeroday_vpn']
-    licencias_col = db['licencias_script']
-    admins_col = db['admins']
+    keys_collection = db['keys']
+    admins_collection = db['admins']
 except Exception as e:
     print("Error conectando a Mongo o Telegram:", e)
     exit(1)
 
 def is_admin(chat_id):
-    return admins_col.find_one({"chat_id": chat_id, "role": "admin"}) is not None
+    return admins_collection.find_one({"chat_id": chat_id, "role": "admin"}) is not None
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    if is_admin(message.chat.id):
-        texto = (
-            "👑 *PANEL ADMIN ZERODAY (KEYS DE SCRIPT)* 👑\n\n"
-            "🔹 `/key` ⇨ Genera una Key de 1 solo uso para instalar tu Script en una VPS.\n"
-            "🔹 `/keys` ⇨ Muestra las Keys vírgenes disponibles.\n"
-            "🔹 `/usadas` ⇨ Muestra en qué IPs han instalado tu Script."
-        )
-    else:
-        texto = (
-            "🛡️ *Bot Oficial de Licencias ZeroDay* 🛡️\n\n"
-            "Si eres el dueño del sistema, actívate con:\n"
-            "`/setadmin <clave_secreta>`"
-        )
+    texto = (
+        "🚀 *Bienvenido al Bot ZeroDay* 🚀\n\n"
+        "Para activar una cuenta SSH usa el formato:\n"
+        "`/usar <TU_KEY> <usuario> <contraseña>`\n\n"
+        "Ejemplo:\n`/usar ZD-1234 juan 123456`"
+    )
     bot.reply_to(message, texto, parse_mode="Markdown")
 
 @bot.message_handler(commands=['setadmin'])
 def set_admin(message):
     args = message.text.split()
     if len(args) == 2 and args[1] == ADMIN_SECRETO:
-        admins_col.update_one({"chat_id": message.chat.id}, {"$set": {"role": "admin"}}, upsert=True)
-        bot.reply_to(message, "✅ *¡Listo, Oswaldo!* Ya estás registrado como Dueño.\n\nEscribe `/key` cada vez que quieras sacar una Key nueva para vender o regalar.", parse_mode="Markdown")
+        admins_collection.update_one({"chat_id": message.chat.id}, {"$set": {"role": "admin"}}, upsert=True)
+        bot.reply_to(message, "✅ *¡Felicidades!* Ahora eres el Dueño Administrador del Bot. Puedes crear llaves con /gen.", parse_mode="Markdown")
     else:
-        bot.reply_to(message, "❌ Clave secreta incorrecta.")
+        bot.reply_to(message, "❌ Código secreto incorrecto o formato inválido.")
 
-@bot.message_handler(commands=['key', 'gen'])
-def generar_licencia(message):
+@bot.message_handler(commands=['gen'])
+def gen_key(message):
     if not is_admin(message.chat.id):
-        bot.reply_to(message, "⛔ Solo el dueño Oswaldo puede generar Keys.")
+        bot.reply_to(message, "⛔ Cuidado: No tienes permisos para crear llaves.")
         return
+    
+    args = message.text.split()
+    if len(args) != 3:
+        bot.reply_to(message, "Uso: `/gen <dias> <limite_conexiones>`\nEjemplo: `/gen 30 2`", parse_mode="Markdown")
+        return
+    
+    try:
+        dias = int(args[1])
+        limite = int(args[2])
+        key = "ZD-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+        
+        keys_collection.insert_one({
+            "key": key,
+            "dias": dias,
+            "limite": limite,
+            "usada": False,
+            "creada": datetime.now()
+        })
+        bot.reply_to(message, f"✅ *Key Generada con Éxito*\n\n🔑 Key: `{key}`\n⏳ Días: {dias}\n📈 Conexiones: {limite}\n\nEnvía esta Key a tu cliente para que use el comando /usar", parse_mode="Markdown")
+    except ValueError:
+        bot.reply_to(message, "❌ Días y límite deben ser números enteros.")
 
-    nueva_key = "ZD-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=8))
-    licencias_col.insert_one({
-        "key": nueva_key,
-        "usada": False,
-        "ip_vps": "Ninguna",
-        "creada": datetime.now().strftime("%d/%m/%Y %H:%M")
-    })
+@bot.message_handler(commands=['usar'])
+def usar_key(message):
+    args = message.text.split()
+    if len(args) != 4:
+        bot.reply_to(message, "Uso correcto:\n`/usar <KEY> <usuario> <contraseña>`", parse_mode="Markdown")
+        return
+    
+    key_input = args[1]
+    user_ssh = args[2]
+    pass_ssh = args[3]
+    
+    # Buscar en MongoDB
+    key_data = keys_collection.find_one({"key": key_input})
+    
+    if not key_data:
+        bot.reply_to(message, "❌ La Key ingresada no existe.")
+        return
+    if key_data.get("usada"):
+        bot.reply_to(message, "❌ Esta Key ya fue utilizada por otra persona.")
+        return
+    
+    # Verificar si el nombre de usuario ya existe en Linux
+    check_user = subprocess.run(["id", user_ssh], capture_output=True)
+    if check_user.returncode == 0:
+        bot.reply_to(message, "❌ Ese nombre de usuario ya está registrado. Por favor intenta de nuevo con un nombre distinto.")
+        return
+        
+    dias = key_data["dias"]
+    limite = key_data["limite"]
+    
+    try:
+        # Crear usuario nativo en el VPS
+        subprocess.run(["useradd", "-m", "-s", "/bin/bash", user_ssh])
+        
+        # Ponerle la contraseña
+        proc = subprocess.Popen(['chpasswd'], stdin=subprocess.PIPE)
+        proc.communicate(input=f"{user_ssh}:{pass_ssh}".encode('utf-8'))
+        
+        # Ponerle fecha de caducidad
+        date_exp = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
+        subprocess.run(["chage", "-E", date_exp, user_ssh])
+        
+        # Fijar limite de conexiones simultaneas
+        os.makedirs("/etc/vps_limites", exist_ok=True)
+        with open(f"/etc/vps_limites/{user_ssh}", "w") as f:
+            f.write(str(limite))
+            
+        # Marcar la Key como gastada en MongoDB
+        keys_collection.update_one({"_id": key_data["_id"]}, {"$set": {"usada": True, "user_ssh": user_ssh}})
+        
+        # Instalar bloqueador de multi-login si no existe
+        if not os.path.exists("/usr/local/bin/monitor_limites.sh"):
+            monitor_code = "#!/bin/bash\nfor user in $(ls /etc/vps_limites/ 2>/dev/null); do\nlimite=$(cat /etc/vps_limites/$user)\nconex=$(ps -u$user 2>/dev/null | grep -c sshd)\nif [ \"$conex\" -gt \"$limite\" ]; then\npkill -u $user sshd\nfi\ndone\n"
+            with open("/usr/local/bin/monitor_limites.sh", "w") as m:
+                m.write(monitor_code)
+            os.chmod("/usr/local/bin/monitor_limites.sh", 0o755)
+            os.system("(crontab -l 2>/dev/null | grep -v 'monitor_limites.sh'; echo '* * * * * /usr/local/bin/monitor_limites.sh') | crontab -")
 
-    respuesta = (
-        "✅ *KEY DE 1 SOLO USO GENERADA*\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔑 *Key:* `{nueva_key}`\n"
-        "📦 *Tipo:* Instalación Script ZeroDay (1 Uso)\n"
-        "━━━━━━━━━━━━━━━━━━━━━\n"
-        "📋 *Pásale este instalador + la Key a tu cliente:*\n"
-        "`apt update -y && apt install curl -y && bash <(curl -sL https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/menu.sh)`"
-    )
-    bot.reply_to(message, respuesta, parse_mode="Markdown")
-
-@bot.message_handler(commands=['keys'])
-def ver_disponibles(message):
-    if not is_admin(message.chat.id):
-        return
-    libres = list(licencias_col.find({"usada": False}))
-    if not libres:
-        bot.reply_to(message, "📭 No hay Keys libres en este momento. Crea una con `/key`.", parse_mode="Markdown")
-        return
-    txt = "🟢 *KEYS DISPONIBLES (SIN USAR):*\n\n"
-    for k in libres[-15:]:
-        txt += f"🔑 `{k['key']}` (Creada: {k.get('creada','')})\n"
-    bot.reply_to(message, txt, parse_mode="Markdown")
-
-@bot.message_handler(commands=['usadas'])
-def ver_usadas(message):
-    if not is_admin(message.chat.id):
-        return
-    gastadas = list(licencias_col.find({"usada": True}))
-    if not gastadas:
-        bot.reply_to(message, "📭 Aún no se ha quemado ninguna Key.", parse_mode="Markdown")
-        return
-    txt = "🔥 *HISTORIAL DE KEYS USADAS:*\n\n"
-    for k in gastadas[-15:]:
-        txt += f"❌ `{k['key']}` ➔ IP: `{k.get('ip_vps','?')}` ({k.get('fecha_uso','')})\n"
-    bot.reply_to(message, txt, parse_mode="Markdown")
+        bot.reply_to(message, f"✅ *¡Cuenta Creada Exitosamente en el Servidor!*\n\n👤 Usuario: `{user_ssh}`\n🔑 Clave: `{pass_ssh}`\n⏳ Válida hasta: {date_exp}\n📈 Límite: {limite} dispositivos", parse_mode="Markdown")
+        
+    except Exception as e:
+        bot.reply_to(message, f"❌ Ocurrió un error al crear la cuenta en el VPS. Intenta de nuevo más tarde.")
 
 bot.infinity_polling()
 EOF_BOT
@@ -1870,12 +1782,11 @@ EOF_SRV
             systemctl restart zeroday-bot
             sleep 2
             if systemctl is-active --quiet zeroday-bot; then
-                echo -e "\n ${V}¡BOT GENERADOR DE KEYS ACTIVO EN SEGUNDO PLANO!   ${N}"
+                echo -e "\n ${V}¡EL BOT FUE INSTALADO Y ESTÁ CORRIENDO EN SEGUNDO PLANO!   ${N}"
                 echo -e " ${C}================================================${N}"
-                echo -e " ${W}1. Ve a tu bot en Telegram y envíale:${N}"
-                echo -e "    ${A}/setadmin zerodayadmin${N}"
-                echo -e " ${W}2. Para crear una Key de 1 solo uso envía:${N}"
-                echo -e "    ${V}/key${N}"
+                echo -e " ${W}Ve a Telegram ahora mismo y envíale a tu bot esto:  ${N}"
+                echo -e " ${A}/setadmin zerodayadmin${N}"
+                echo -e " ${W}Para darte permisos de creador de llaves.${N}"
                 echo -e " ${C}================================================${N}"
             else
                 echo -e "\n ${R}Hubo un error al iniciar el Bot. Usa la opción 4 para ver logs.   ${N}"
