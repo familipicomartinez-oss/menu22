@@ -1,5 +1,13 @@
 #!/bin/bash
 
+# Limpieza automatica de cualquier rastro previo del bot en segundo plano
+if [ -f /etc/systemd/system/zeroday-bot.service ] || [ -d /etc/zeroday_bot ]; then
+    systemctl stop zeroday-bot >/dev/null 2>&1
+    systemctl disable zeroday-bot >/dev/null 2>&1
+    rm -rf /etc/zeroday_bot /etc/systemd/system/zeroday-bot.service >/dev/null 2>&1
+    systemctl daemon-reload >/dev/null 2>&1
+fi
+
 # ==========================================
 # CEREBRO DE COLORES EXTENDIDOS 256 (NEÓN PURO MÁXIMO)
 # ==========================================
@@ -734,10 +742,14 @@ apt-get install -y iptables curl >/dev/null 2>&1
 curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
 echo -e "{\n  \"listen\": \":36712\",\n  \"stream_buffer\": 33554432,\n  \"receive_buffer\": 8388608,\n  \"auth\": {\n    \"mode\": \"passwords\"\n  }\n}" > /root/udp/config.json
-echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
+echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443,7200,7300\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
 systemctl daemon-reload; systemctl enable udp-custom >/dev/null 2>&1; systemctl restart udp-custom
 iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null
 iptables -t nat -A PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712
+# Proteger puertos de SlowDNS si está activo
+if [ -f /etc/slowdns/start_dns.sh ]; then
+    systemctl restart slowdns 2>/dev/null
+fi
 echo -e " ${V}¡UDP Custom Instalado y Activo (Puerto 36712)!   ${N}"
 read -p " Enter..." ;;
 2) systemctl stop udp-custom; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
@@ -1171,6 +1183,83 @@ EOF
     echo -ne " ${W}► Enter para continuar...   ${N}"; read
 }
 
+# ==========================================
+# MOTOR DE REPARACIÓN Y BLINDAJE SLOWDNS
+# ==========================================
+reparar_red_slowdns() {
+    # 1. Liberar puerto 53 de systemd-resolved en Ubuntu 24.04 sin perder DNS
+    if [ -f /etc/systemd/resolved.conf ]; then
+        sed -i 's/^#*DNS=.*/DNS=8.8.8.8 1.1.1.1/g' /etc/systemd/resolved.conf 2>/dev/null
+        sed -i 's/^#*DNSStubListener=.*/DNSStubListener=no/g' /etc/systemd/resolved.conf 2>/dev/null
+        grep -q "^DNSStubListener=no" /etc/systemd/resolved.conf || echo "DNSStubListener=no" >> /etc/systemd/resolved.conf
+        systemctl restart systemd-resolved >/dev/null 2>&1
+    fi
+    rm -f /etc/resolv.conf 2>/dev/null
+    echo -e "nameserver 8.8.8.8\nnameserver 1.1.1.1" > /etc/resolv.conf
+
+    # 2. Optimizar OpenSSH para que acepte túneles lentos de SlowDNS y algoritmos de HTTP Custom
+    if [ -f /etc/ssh/sshd_config ]; then
+        sed -i '/^#*UseDNS /d' /etc/ssh/sshd_config
+        sed -i '/^#*MaxStartups /d' /etc/ssh/sshd_config
+        sed -i '/^HostKeyAlgorithms /d' /etc/ssh/sshd_config
+        sed -i '/^PubkeyAcceptedAlgorithms /d' /etc/ssh/sshd_config
+        cat << 'EOF_SSH' >> /etc/ssh/sshd_config
+UseDNS no
+MaxStartups 100:30:200
+HostKeyAlgorithms +ssh-rsa,ssh-dss
+PubkeyAcceptedAlgorithms +ssh-rsa,ssh-dss
+EOF_SSH
+        systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1
+    fi
+
+    # 3. Crear lanzador persistente que blinda IPtables por encima de UDP Custom
+    cat << 'EOF_START_DNS' > /etc/slowdns/start_dns.sh
+#!/bin/bash
+DOM_NS=$(tr -d ' \n\r' < /etc/slowdns/ns_domain.txt)
+PT_LOC=$(tr -d ' \n\r' < /etc/slowdns/puerto_local.txt)
+[ -z "$PT_LOC" ] && PT_LOC=22
+
+# Limpiar duplicados previos
+while iptables -D INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null; do :; done
+while iptables -D INPUT -p udp --dport 53 -j ACCEPT 2>/dev/null; do :; done
+while iptables -t nat -D PREROUTING -p udp --dport 5300 -j ACCEPT 2>/dev/null; do :; done
+while iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null; do :; done
+
+# Inyectar en la posición #1 para que UDP Custom (1:65535) nunca secuestre el tráfico DNS
+iptables -I INPUT 1 -p udp --dport 5300 -j ACCEPT
+iptables -I INPUT 1 -p udp --dport 53 -j ACCEPT
+iptables -t nat -I PREROUTING 1 -p udp --dport 5300 -j ACCEPT
+iptables -t nat -I PREROUTING 1 -p udp --dport 53 -j REDIRECT --to-ports 5300
+
+ufw allow 53/udp >/dev/null 2>&1
+ufw allow 5300/udp >/dev/null 2>&1
+
+exec /etc/slowdns/dnstt-server -udp :5300 -mtu 512 -privkey-file /etc/slowdns/server.key "$DOM_NS" 127.0.0.1:"$PT_LOC"
+EOF_START_DNS
+    chmod +x /etc/slowdns/start_dns.sh
+
+    cat << 'EOF_SVC_DNS' > /etc/systemd/system/slowdns.service
+[Unit]
+Description=SlowDNS Server (DNSTT ZeroDay)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/etc/slowdns
+ExecStart=/etc/slowdns/start_dns.sh
+Restart=always
+RestartSec=3
+
+[Install]
+WantedBy=multi-user.target
+EOF_SVC_DNS
+
+    systemctl daemon-reload
+    systemctl enable slowdns >/dev/null 2>&1
+    systemctl restart slowdns >/dev/null 2>&1
+}
+
 menu_slowdns() {
 while true; do
     clear
@@ -1194,7 +1283,7 @@ while true; do
     echo -e "${C}------------------------------------------------${N}"
     echo -e " ${V}[1]${N} ${W}🟢 Instalar SlowDns   ${N}"
     echo -e " ${A}[2]${N} ${W}👁️ Ver Información / Llaves   ${N}"
-    echo -e " ${C}[3]${N} ${W}🔄 Reiniciar SlowDns   ${N}"
+    echo -e " ${C}[3]${N} ${W}🔄 Reiniciar y Reparar Red SlowDns   ${N}"
     echo -e " ${R}[4]${N} ${W}🗑️ Remover SlowDns   ${N}"
     echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
     echo -e "${C}------------------------------------------------${N}"
@@ -1205,13 +1294,17 @@ while true; do
         2) info_slowdns ;;
         3)
             echo -e "${C}================================================${N}"
-            echo -e " ${V}⏳ Reiniciando servicio SlowDNS...   ${N}"
-            systemctl restart slowdns 2>/dev/null
-            sleep 2
-            if systemctl is-active --quiet slowdns; then
-                echo -e " ${V}¡Servicio reiniciado correctamente!   ${N}"
+            if [ ! -s /etc/slowdns/server.key ]; then
+                echo -e " ${R}[!] SlowDNS no está instalado. Usa la Opción 1 primero.   ${N}"
             else
-                echo -e " ${R}Error al reiniciar el servicio.   ${N}"
+                echo -e " ${V}⏳ Liberando puerto 53, blindando IPtables y reiniciando SlowDNS...   ${N}"
+                reparar_red_slowdns
+                sleep 2
+                if systemctl is-active --quiet slowdns; then
+                    echo -e " ${V}¡SlowDNS reparado y activo en puertos 53 -> 5300!   ${N}"
+                else
+                    echo -e " ${R}Error al reiniciar el servicio.   ${N}"
+                fi
             fi
             echo -ne " ${W}► Enter para continuar...   ${N}"; read
             ;;
@@ -1224,8 +1317,9 @@ while true; do
                 systemctl disable slowdns > /dev/null 2>&1
                 rm -f /etc/systemd/system/slowdns.service
                 systemctl daemon-reload
-                iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 > /dev/null 2>&1
-                iptables -D INPUT -p udp --dport 5300 -j ACCEPT > /dev/null 2>&1
+                while iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null; do :; done
+                while iptables -t nat -D PREROUTING -p udp --dport 5300 -j ACCEPT 2>/dev/null; do :; done
+                while iptables -D INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null; do :; done
                 rm -rf /etc/slowdns
                 echo -e " ${V}SlowDNS desinstalado por completo.   ${N}"
             else
@@ -1248,7 +1342,7 @@ instalar_slowdns() {
     if [ -d "/etc/slowdns" ]; then
         if [ -s "/etc/slowdns/pub_key.txt" ]; then
             echo -e " ${R}[!] SlowDNS ya se encuentra instalado.   ${N}"
-            echo -e " ${W}Usa la opción 4 para removerlo primero.   ${N}"
+            echo -e " ${W}Usa la opción 3 para repararlo o la 4 para removerlo primero.   ${N}"
             echo -ne " ${W}► Enter para continuar...   ${N}"; read
             return
         else
@@ -1287,7 +1381,8 @@ instalar_slowdns() {
         TAM_DNS=$(wc -c < /etc/slowdns/dnstt-server 2>/dev/null || echo 0)
         if [ "$TAM_DNS" -gt 1000000 ]; then
             chmod +x /etc/slowdns/dnstt-server
-            if /etc/slowdns/dnstt-server -help >/dev/null 2>&1 || /etc/slowdns/dnstt-server -h >/dev/null 2>&1; then
+            # Verificación compatible con Go (flag -help devuelve exit 2 pero imprime Usage)
+            if /etc/slowdns/dnstt-server -help 2>&1 | grep -qiE "usage|privkey|udp"; then
                 DESCARGA_DNS=1
                 break
             fi
@@ -1340,42 +1435,14 @@ instalar_slowdns() {
     echo "$pub_key" > /etc/slowdns/pub_key.txt
     echo "$puerto_local" > /etc/slowdns/puerto_local.txt
 
-    echo -e " ${V}⚙️ Configurando servicio SystemD...   ${N}"
-    cat <<EOF > /etc/systemd/system/slowdns.service
-[Unit]
-Description=SlowDNS Server (DNSTT)
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/etc/slowdns
-ExecStart=/etc/slowdns/dnstt-server -udp :5300 -privkey-file /etc/slowdns/server.key $dominio_ns 127.0.0.1:$puerto_local
-Restart=always
-RestartSec=3
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    echo -e " ${V}🛡️ Aplicando reglas IPtables...   ${N}"
-    iptables -D INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null
-    iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null
-    iptables -I INPUT -p udp --dport 5300 -j ACCEPT
-    iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300
-    ufw allow 53/udp >/dev/null 2>&1
-    ufw allow 5300/udp >/dev/null 2>&1
-    mkdir -p /etc/iptables
-    iptables-save > /etc/iptables/rules.v4 2>/dev/null
-
-    systemctl daemon-reload
-    systemctl enable slowdns > /dev/null 2>&1
-    systemctl restart slowdns
+    echo -e " ${V}🛡️ Liberando puerto 53, optimizando SSH y aplicando IPtables...   ${N}"
+    reparar_red_slowdns
+    sleep 2
 
     echo -e "\n${C}================================================${N}"
     echo -e "   ${V}¡SLOWDNS INSTALADO Y ACTIVO CON ÉXITO!   ${N}"
     echo -e "${C}================================================${N}"
-    echo -e " ${A}🔹 REDIRECCIÓN :${N} ${V}$puerto_local -> 5300   ${N}"
+    echo -e " ${A}🔹 REDIRECCIÓN :${N} ${V}$puerto_local -> 5300 (MTU 512)   ${N}"
     echo -e " ${A}🔹 DOMINIO NS  :${N} ${W}$dominio_ns   ${N}"
     echo -e " ${A}🔹 PUBLIC KEY  :${N} ${V}$pub_key   ${N}"
     echo -e "${C}================================================${N}"
@@ -1590,243 +1657,6 @@ esac
 done
 }
 
-menu_bot() {
-while true; do
-    clear
-    ESTADO_BOT=$(systemctl is-active --quiet zeroday-bot && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
-    echo -e "${C}================================================${N}"
-    echo -e "     ${A}🤖 GESTOR BOT TELEGRAM (KEYS) | ZeroDay 🤖   ${N}"
-    echo -e "${C}================================================${N}"
-    echo -e " ${W}Estado del Bot :${N} $ESTADO_BOT"
-    echo -e "${C}------------------------------------------------${N}"
-    echo -e " ${V}[1]${N} ${W}🟢 Instalar y Encender Bot (MongoDB)   ${N}"
-    echo -e " ${A}[2]${N} ${W}⏸️  Detener Bot   ${N}"
-    echo -e " ${V}[3]${N} ${W}▶️  Iniciar Bot   ${N}"
-    echo -e " ${C}[4]${N} ${W}📋 Ver Registro (Log) del Bot   ${N}"
-    echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Bot   ${N}"
-    echo -e " ${C}[0]${N} ${W}↩️  REGRESAR AL MENÚ   ${N}"
-    echo -e "${C}------------------------------------------------${N}"
-    echo -ne " ${W}► Opción :   ${N}"; read op_bot
-
-    case $op_bot in
-        1)
-            clear
-            echo -e "${C}================================================${N}"
-            echo -e " ${V}⏳ Preparando motor Python y librerías de Telegram...   ${N}"
-            dpkg --configure -a >/dev/null 2>&1
-            apt-get update -y >/dev/null 2>&1
-            apt-get install -y python3 python3-pip python3-pymongo python3-dnspython >/dev/null 2>&1
-            echo -e " ${W}Instalando módulos en modo ligero (512MB RAM)...   ${N}"
-            pip3 install --no-cache-dir --break-system-packages pyTelegramBotAPI pymongo dnspython >/dev/null 2>&1 || \
-            pip3 install --no-cache-dir pyTelegramBotAPI pymongo dnspython >/dev/null 2>&1
-            
-            mkdir -p /etc/zeroday_bot
-            echo -e " ${A}⚙️ Grabando a Flexible (ID: 6414470898) como Dueño Único...   ${N}"
-            
-            cat << 'EOF_BOT' > /etc/zeroday_bot/bot.py
-import telebot
-from pymongo import MongoClient
-import subprocess
-import random
-import string
-import os
-from datetime import datetime, timedelta
-
-# CREDENCIALES EXCLUSIVAS ZERODAY
-TOKEN = "8850791872:AAGGT83B_jnHTzmCf_uZVoMbHvgQov7RBHo"
-MONGO_URI = "mongodb+srv://martinoswaldo01_db_user:nlcZvCf5uxcBuRKr@cluster0.1hzsh2n.mongodb.net/?retryWrites=true&w=majority"
-MI_ID_DUENO = 6414470898
-
-try:
-    bot = telebot.TeleBot(TOKEN)
-    client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-    db = client['zeroday_vpn']
-    keys_collection = db['keys']
-    admins_collection = db['admins']
-    admins_collection.update_one({"chat_id": MI_ID_DUENO}, {"$set": {"role": "admin"}}, upsert=True)
-except Exception as e:
-    print("Error conectando a Mongo o Telegram:", e)
-    exit(1)
-
-def is_admin(chat_id):
-    return chat_id == MI_ID_DUENO
-
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    if is_admin(message.chat.id):
-        texto = (
-            "👑 *Panel de Dueño ZeroDay Activo* 👑\n\n"
-            "🔑 *Generar Key de Instalación (1 uso):*\n"
-            "`/key`\n\n"
-            "👤 *Generar Key con días y límite:*\n"
-            "`/gen <dias> <limite>` (Ej: `/gen 30 1`)\n\n"
-            "📲 *Canjear Key para crear cuenta SSH:*\n"
-            "`/usar <KEY> <usuario> <contraseña>`"
-        )
-    else:
-        texto = (
-            "🚀 *Bienvenido al Bot ZeroDay* 🚀\n\n"
-            "Para activar una cuenta SSH usa el formato:\n"
-            "`/usar <TU_KEY> <usuario> <contraseña>`\n\n"
-            "Ejemplo:\n`/usar ZD-1234 juan 123456`"
-        )
-    bot.reply_to(message, texto, parse_mode="Markdown")
-
-@bot.message_handler(commands=['key'])
-def gen_quick_key(message):
-    if not is_admin(message.chat.id):
-        bot.reply_to(message, "⛔ Acceso denegado. Solo el dueño de ZeroDay puede generar llaves.")
-        return
-    
-    key = "ZD-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-    keys_collection.insert_one({
-        "key": key,
-        "dias": 30,
-        "limite": 1,
-        "usada": False,
-        "creada": datetime.now()
-    })
-    bot.reply_to(
-        message,
-        f"✅ *Key ZeroDay Generada (1 Solo Uso)*\n\n🔑 Key: `{key}`\n\n_(Toca la Key para copiarla)_",
-        parse_mode="Markdown"
-    )
-
-@bot.message_handler(commands=['gen'])
-def gen_key(message):
-    if not is_admin(message.chat.id):
-        bot.reply_to(message, "⛔ Acceso denegado. Solo el dueño de ZeroDay puede crear llaves.")
-        return
-    
-    args = message.text.split()
-    if len(args) != 3:
-        bot.reply_to(message, "Uso: `/gen <dias> <limite_conexiones>`\nEjemplo: `/gen 30 2`", parse_mode="Markdown")
-        return
-    
-    try:
-        dias = int(args[1])
-        limite = int(args[2])
-        key = "ZD-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
-        
-        keys_collection.insert_one({
-            "key": key,
-            "dias": dias,
-            "limite": limite,
-            "usada": False,
-            "creada": datetime.now()
-        })
-        bot.reply_to(message, f"✅ *Key Generada con Éxito*\n\n🔑 Key: `{key}`\n⏳ Días: {dias}\n📈 Conexiones: {limite}\n\nEnvía esta Key a tu cliente para que use el comando /usar", parse_mode="Markdown")
-    except ValueError:
-        bot.reply_to(message, "❌ Días y límite deben ser números enteros.")
-
-@bot.message_handler(commands=['usar'])
-def usar_key(message):
-    args = message.text.split()
-    if len(args) != 4:
-        bot.reply_to(message, "Uso correcto:\n`/usar <KEY> <usuario> <contraseña>`", parse_mode="Markdown")
-        return
-    
-    key_input = args[1]
-    user_ssh = args[2]
-    pass_ssh = args[3]
-    
-    key_data = keys_collection.find_one({"key": key_input})
-    
-    if not key_data:
-        bot.reply_to(message, "❌ La Key ingresada no existe.")
-        return
-    if key_data.get("usada"):
-        bot.reply_to(message, "❌ Esta Key ya fue utilizada por otra persona.")
-        return
-    
-    check_user = subprocess.run(["id", user_ssh], capture_output=True)
-    if check_user.returncode == 0:
-        bot.reply_to(message, "❌ Ese nombre de usuario ya está registrado. Por favor intenta de nuevo con un nombre distinto.")
-        return
-        
-    dias = key_data["dias"]
-    limite = key_data["limite"]
-    
-    try:
-        subprocess.run(["useradd", "-m", "-s", "/bin/bash", user_ssh])
-        
-        proc = subprocess.Popen(['chpasswd'], stdin=subprocess.PIPE)
-        proc.communicate(input=f"{user_ssh}:{pass_ssh}".encode('utf-8'))
-        
-        date_exp = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
-        subprocess.run(["chage", "-E", date_exp, user_ssh])
-        
-        os.makedirs("/etc/vps_limites", exist_ok=True)
-        with open(f"/etc/vps_limites/{user_ssh}", "w") as f:
-            f.write(str(limite))
-            
-        keys_collection.update_one({"_id": key_data["_id"]}, {"$set": {"usada": True, "user_ssh": user_ssh}})
-        
-        if not os.path.exists("/usr/local/bin/monitor_limites.sh"):
-            monitor_code = "#!/bin/bash\nfor user in $(ls /etc/vps_limites/ 2>/dev/null); do\nlimite=$(cat /etc/vps_limites/$user)\nconex=$(ps -u$user 2>/dev/null | grep -c sshd)\nif [ \"$conex\" -gt \"$limite\" ]; then\npkill -u $user sshd\nfi\ndone\n"
-            with open("/usr/local/bin/monitor_limites.sh", "w") as m:
-                m.write(monitor_code)
-            os.chmod("/usr/local/bin/monitor_limites.sh", 0o755)
-            os.system("(crontab -l 2>/dev/null | grep -v 'monitor_limites.sh'; echo '* * * * * /usr/local/bin/monitor_limites.sh') | crontab -")
-
-        bot.reply_to(message, f"✅ *¡Cuenta Creada Exitosamente en el Servidor!*\n\n👤 Usuario: `{user_ssh}`\n🔑 Clave: `{pass_ssh}`\n⏳ Válida hasta: {date_exp}\n📈 Límite: {limite} dispositivos", parse_mode="Markdown")
-        
-    except Exception:
-        bot.reply_to(message, "❌ Ocurrió un error al crear la cuenta en el VPS. Intenta de nuevo más tarde.")
-
-try:
-    bot.send_message(
-        MI_ID_DUENO,
-        "✅ *¡Bot ZeroDay En Línea!*\n👑 Hola *Flexible*, estás reconocido automáticamente como el **Dueño Único**.\n\nEscribe `/key` o `/gen 30 1` para crear tus llaves.",
-        parse_mode="Markdown"
-    )
-except Exception:
-    pass
-
-bot.infinity_polling()
-EOF_BOT
-            
-            echo -e " ${V}🛡️ Configurando servicio en segundo plano...   ${N}"
-            cat << 'EOF_SRV' > /etc/systemd/system/zeroday-bot.service
-[Unit]
-Description=ZeroDay Telegram Bot (Key Manager)
-After=network.target
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/etc/zeroday_bot
-ExecStart=/usr/bin/python3 /etc/zeroday_bot/bot.py
-Restart=always
-RestartSec=5
-
-[Install]
-WantedBy=multi-user.target
-EOF_SRV
-            systemctl daemon-reload
-            systemctl enable zeroday-bot >/dev/null 2>&1
-            systemctl restart zeroday-bot
-            sleep 3
-            if systemctl is-active --quiet zeroday-bot; then
-                echo -e "\n ${V}¡EL BOT FUE INSTALADO Y ESTÁ CORRIENDO EN SEGUNDO PLANO!   ${N}"
-                echo -e " ${C}================================================${N}"
-                echo -e " ${W}Ya estás registrado de fábrica como Dueño Único.${N}"
-                echo -e " ${W}Ve a tu Telegram y escribe:${N} ${A}/key${N} ${W}o${N} ${A}/gen 30 1${N}"
-                echo -e " ${C}================================================${N}"
-            else
-                echo -e "\n ${R}Hubo un error al iniciar el Bot. Usa la opción 4 para ver logs.   ${N}"
-            fi
-            echo -ne " ${W}► Enter para continuar...   ${N}"; read
-            ;;
-        2) systemctl stop zeroday-bot; echo -e " ${A}Bot Detenido.${N}"; read -p " Enter..." ;;
-        3) systemctl start zeroday-bot; echo -e " ${V}Bot Iniciado.${N}"; read -p " Enter..." ;;
-        4) clear; echo -e "${A}=== REGISTRO DEL BOT EN VIVO ===${N}"; journalctl -u zeroday-bot -n 30 --no-pager; echo -ne "\n ${W}► Enter para regresar...   ${N}"; read ;;
-        5) systemctl stop zeroday-bot >/dev/null 2>&1; systemctl disable zeroday-bot >/dev/null 2>&1; rm -rf /etc/zeroday_bot /etc/systemd/system/zeroday-bot.service; systemctl daemon-reload; echo -e " ${R}Bot Desinstalado por completo.${N}"; read -p " Enter..." ;;
-        0) break ;;
-    esac
-done
-}
-
 while true; do
 clear
 info_sistema
@@ -1839,7 +1669,6 @@ echo -e " ${V}[06]${N}${W}⇨ 📝 CONFIGURAR BANNER (MENSAJE)   ${N}"
 echo -e " ${V}[07]${N}${W}⇨ 🎨 CAMBIAR COLORES DEL MENU   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${V}[08]${N} ${W}⇨ [!] UPDATE / REMOVE${N}"
-echo -e " ${V}[09]${N}${W}⇨ 🤖 GESTOR BOT TELEGRAM (KEYS)   ${N}"
 echo -e " ${V}[0]${N}  ${W}⇨ [ SALIR ]${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -ne " ${W}► Opcion :   ${N}"; read opcion
@@ -1849,7 +1678,6 @@ case $opcion in
 3|4|5|8) menu_protocolos ;;
 6) configurar_banner ;;
 7) configurar_colores ;;
-9) menu_bot ;;
 0) exit 0 ;;
 *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
 esac
