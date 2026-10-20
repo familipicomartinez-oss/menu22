@@ -36,8 +36,8 @@ optimizar_sshd_estabilidad() {
         sed -i '/^ClientAliveInterval/d;/^ClientAliveCountMax/d;/^TCPKeepAlive/d;/^MaxStartups/d;/^MaxSessions/d;/^UseDNS/d' /etc/ssh/sshd_config
         cat << 'EOF_SSH' >> /etc/ssh/sshd_config
 TCPKeepAlive yes
-ClientAliveInterval 15
-ClientAliveCountMax 6
+ClientAliveInterval 30
+ClientAliveCountMax 120
 MaxStartups 100:30:200
 MaxSessions 100
 UseDNS no
@@ -489,7 +489,7 @@ echo -e "${C}================================================${N}"
 echo -ne " ${W}👤 Nombre de usuario:   ${N}"; read u
 echo -ne " ${W}🔑 Contraseña:   ${N}"; read p
 echo -ne " ${W}⏳ Dias de duración:   ${N}"; read d; d=${d:-30}
-echo -ne " ${W}📈 Límite de conexiones:   ${N}"; read l; l=${l:-1}
+echo -ne " ${W}📈 Límite de conexiones simultáneas (Ej: 2):   ${N}"; read l; l=${l:-2}
 optimizar_sshd_estabilidad
 useradd -m -s /bin/bash "$u" 2>/dev/null
 echo "$u:$p" | chpasswd 2>/dev/null
@@ -497,14 +497,20 @@ chage -E $(date -d "+$d days" +%Y-%m-%d) "$u" 2>/dev/null || true
 mkdir -p /etc/vps_limites
 echo "$l" > "/etc/vps_limites/$u"
 
+# Corrección en el cronjob para evitar que mate conexiones por error
 cat << 'EOF_MONITOR' > /usr/local/bin/monitor_limites.sh
 #!/bin/bash
+# Script optimizado para detectar IPs reales en lugar de procesos locales sshd
 for user in $(ls /etc/vps_limites/ 2>/dev/null); do
     limite=$(cat /etc/vps_limites/$user 2>/dev/null | tr -d ' \n\r')
     [[ ! "$limite" =~ ^[0-9]+$ ]] && continue
-    conex=$(ps -u "$user" -o comm= 2>/dev/null | grep -c "^sshd$")
-    if [ "$conex" -gt "$limite" ]; then
-        pkill -u "$user" sshd
+    
+    # Contar cuántas IPs DISTINTAS están conectadas al usuario (Para Dropbear y OpenSSH)
+    conex_reales=$(netstat -anp 2>/dev/null | grep ESTABLISHED | grep "sshd: $user\|dropbear" | awk '{print $5}' | cut -d: -f1 | sort | uniq | wc -l)
+    
+    if [ "$conex_reales" -gt "$limite" ]; then
+        pkill -u "$user" > /dev/null 2>&1
+        killall -u "$user" > /dev/null 2>&1
     fi
 done
 EOF_MONITOR
@@ -590,8 +596,9 @@ mkdir -p /etc/stunnel
 openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=ZeroDay/O=VPN/C=CO" >/dev/null 2>&1
 chmod 600 /etc/stunnel/stunnel.pem
 
+# CORRECCIÓN DE TIMEOUTS DE STUNNEL4
 cat <<EOF > /etc/stunnel/stunnel.conf
-foreground = yes
+foreground = no
 cert = /etc/stunnel/stunnel.pem
 client = no
 socket = a:SO_REUSEADDR=1
@@ -601,7 +608,7 @@ socket = l:SO_KEEPALIVE=1
 socket = r:SO_KEEPALIVE=1
 TIMEOUTidle = 86400
 TIMEOUTclose = 0
-TIMEOUTconnect = 10
+TIMEOUTconnect = 300
 
 [stunnel-custom-$p2]
 accept = $p2
@@ -1336,7 +1343,7 @@ case $op_v2 in
         ]
       },
       "wsSettings": { "path": "/zeroday" },
-      "sockopt": { "tcpKeepAliveInterval": 15, "tcpNoDelay": true }
+      "sockopt": { "tcpKeepAliveInterval": 30, "tcpNoDelay": true }
     }
   }],
   "outbounds": [{ "protocol": "freedom", "settings": {} }]
