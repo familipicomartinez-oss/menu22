@@ -178,11 +178,20 @@ clear
 echo -e "${C}================================================${N}"
 echo -e "       ${A}⚜️  CREADOR DE CUENTAS TIPO ⚜️   ${N}"
 echo -e "${C}================================================${N}"
-echo -ne " ${W}👤 Nombre de usuario:   ${N}"; read u
-echo -ne " ${W}🔑 Contraseña:   ${N}"; read p
-echo -ne " ${W}⏳ Dias de duración:   ${N}"; read d
-echo -ne " ${W}📈 Límite de conexiones:   ${N}"; read l
-useradd -m -s /bin/bash "$u" 2>/dev/null
+echo -ne " ${W}► Nombre de usuario:   ${N}"; read u
+if [ -z "$u" ]; then
+    echo -e "\n ${R}[!] El nombre de usuario no puede estar vacío.   ${N}"
+    sleep 1
+    continue
+fi
+echo -ne " ${W}► Contraseña:   ${N}"; read p
+p=${p:-12345}
+echo -ne " ${W}► Dias de duración [Default: 30]:   ${N}"; read d
+d=${d:-30}
+echo -ne " ${W}► Límite de conexiones [Default: 1]:   ${N}"; read l
+l=${l:-1}
+
+id "$u" >/dev/null 2>&1 || useradd -m -s /bin/bash "$u" 2>/dev/null
 echo "$u:$p" | chpasswd 2>/dev/null
 chage -E $(date -d "+$d days" +%Y-%m-%d) "$u" 2>/dev/null || true
 mkdir -p /etc/vps_limites
@@ -201,7 +210,9 @@ EOF_MONITOR
 chmod +x /usr/local/bin/monitor_limites.sh
 (crontab -l 2>/dev/null | grep -v "monitor_limites.sh"; echo "* * * * * /usr/local/bin/monitor_limites.sh") | crontab -
 fi
-apt-get install figlet -y >/dev/null 2>&1
+if ! command -v figlet > /dev/null 2>&1; then
+    apt-get install figlet -y >/dev/null 2>&1
+fi
 clear
 echo -e "${C}================================================${N}"
 if command -v figlet > /dev/null 2>&1; then
@@ -241,7 +252,7 @@ echo -e " ${R}  usuario si supera el límite de $l conexiones.   ${N}"
 echo -e "${C}================================================${N}"
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
-2) echo -ne " ${W}Usuario a eliminar:   ${N}"; read u; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"; read -p " Enter..." ;;
+2) echo -ne " ${W}► Usuario a eliminar:   ${N}"; read u; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"; read -p " Enter..." ;;
 3) awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd; read -p " Enter..." ;;
 4) ver_usuarios_online ;;
 0) break ;;
@@ -1084,7 +1095,9 @@ instalar_hcr() {
         apt-get install openssl -y >/dev/null 2>&1
         openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
         -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=MiVPS" \
-        -keyout /etc/hcr/hcr.key -out /etc/hcr/hcr.crt > /dev/null 2>&1
+        -keyout /etc/hcr/key.pem -out /etc/hcr/cert.pem > /dev/null 2>&1
+        cp -f /etc/hcr/key.pem /etc/hcr/hcr.key 2>/dev/null
+        cp -f /etc/hcr/cert.pem /etc/hcr/hcr.crt 2>/dev/null
     else
         MODO="Plain"
     fi
@@ -1601,9 +1614,9 @@ while true; do
             echo -e "${C}================================================${N}"
             echo -e " ${V}⏳ Instalando dependencias de Python y Mongo...   ${N}"
             apt-get update -y >/dev/null 2>&1
-            apt-get install python3 python3-pip -y >/dev/null 2>&1
+            apt-get install python3 python3-pip python3-dnspython -y >/dev/null 2>&1
             echo -e " ${W}Esto puede tomar unos segundos...   ${N}"
-            pip3 install pyTelegramBotAPI pymongo --break-system-packages >/dev/null 2>&1 || pip3 install pyTelegramBotAPI pymongo >/dev/null 2>&1
+            pip3 install pyTelegramBotAPI pymongo dnspython --break-system-packages >/dev/null 2>&1 || pip3 install pyTelegramBotAPI pymongo dnspython >/dev/null 2>&1
             
             mkdir -p /etc/zeroday_bot
             echo -e " ${A}⚙️ Escribiendo el cerebro del Bot con tus Keys...   ${N}"
