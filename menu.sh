@@ -593,12 +593,12 @@ pkill -9 stunnel4 >/dev/null 2>&1
 liberar_puerto_fantasma "$p2" "ssl"
 
 mkdir -p /etc/stunnel
+rm -f /var/run/stunnel4.pid
 openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=ZeroDay/O=VPN/C=CO" >/dev/null 2>&1
 chmod 600 /etc/stunnel/stunnel.pem
 
-# CORRECCIÓN DE TIMEOUTS DE STUNNEL4
 cat <<EOF > /etc/stunnel/stunnel.conf
-foreground = no
+pid = /var/run/stunnel4.pid
 cert = /etc/stunnel/stunnel.pem
 client = no
 socket = a:SO_REUSEADDR=1
@@ -621,7 +621,8 @@ Description=SSL Tunnel Native Service (ZeroDay)
 After=network.target
 
 [Service]
-Type=simple
+Type=forking
+PIDFile=/var/run/stunnel4.pid
 ExecStart=/usr/bin/stunnel4 /etc/stunnel/stunnel.conf
 Restart=always
 RestartSec=2
@@ -637,12 +638,13 @@ ufw allow $p2/tcp >/dev/null 2>&1
 systemctl daemon-reload
 systemctl enable stunnel4 >/dev/null 2>&1
 systemctl restart stunnel4
-sleep 1
+sleep 2
 
 if systemctl is-active --quiet stunnel4 && ss -tlnp | grep -qE ":${p2}\b"; then
     echo -e " ${V}¡SSL instalado, blindado contra desconexiones y activo en puerto $p2!   ${N}"
 else
-    echo -e " ${R}ERROR: Stunnel4 no pudo iniciar en el puerto $p2. Usa la Opción 6 para resetear.   ${N}"
+    echo -e " ${R}ERROR: Stunnel4 no pudo iniciar en el puerto $p2. Detalles del sistema:   ${N}"
+    journalctl -u stunnel4.service -n 5 --no-pager
 fi
 read -p " Enter..." ;;
 2)
@@ -719,7 +721,8 @@ if grep -qE "^accept[[:space:]]*=[[:space:]]*$p_del$" /etc/stunnel/stunnel.conf;
             if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0
         }
         if (keep) print $0 "\n"
-    }' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
+    }
+    ' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
     mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
 
     fuser -k -9 "${p_del}/tcp" >/dev/null 2>&1
