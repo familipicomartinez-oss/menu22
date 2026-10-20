@@ -48,7 +48,7 @@ liberar_puerto_fantasma() {
 
     # 2. Si otro protocolo tenía guardado ese mismo puerto en sus archivos, limpiarlo para que no vuelva a chocar
     if [ "$conservar" != "v2ray" ] && [ -f /usr/local/etc/xray/puerto.txt ]; then
-        if [ "$(cat /usr/local/etc/xray/puerto.txt 2>/dev/null)" == "$pt" ]; then
+        if [ "$(cat /usr/local/etc/xray/puerto.txt 2>/dev/null | tr -d ' \n\r')" == "$pt" ]; then
             systemctl stop xray >/dev/null 2>&1
             pkill -9 xray >/dev/null 2>&1
             rm -f /usr/local/etc/xray/puerto.txt
@@ -76,17 +76,19 @@ liberar_puerto_fantasma() {
     fi
 
     if [ "$conservar" != "python" ] && [ -f /etc/proxy.py ]; then
-        local pt_py=$(grep "bind" /etc/proxy.py 2>/dev/null | awk -F',' '{print $2}' | tr -d ' )')
+        local pt_py=$(grep "bind" /etc/proxy.py 2>/dev/null | awk -F',' '{print $2}' | tr -d ' )\n\r')
         if [ "$pt_py" == "$pt" ]; then
             systemctl stop proxypy >/dev/null 2>&1
+            pkill -9 -f "/etc/proxy.py" >/dev/null 2>&1
             rm -f /etc/proxy.py /etc/systemd/system/proxypy.service
             systemctl daemon-reload
         fi
     fi
 
     if [ "$conservar" != "ssr" ] && [ -f /etc/ssr/puerto.txt ]; then
-        if [ "$(cat /etc/ssr/puerto.txt 2>/dev/null)" == "$pt" ]; then
+        if [ "$(cat /etc/ssr/puerto.txt 2>/dev/null | tr -d ' \n\r')" == "$pt" ]; then
             systemctl stop ssr-server >/dev/null 2>&1
+            pkill -9 -f "shadowsocksr" >/dev/null 2>&1
             rm -f /etc/ssr/puerto.txt
         fi
     fi
@@ -95,6 +97,7 @@ liberar_puerto_fantasma() {
         source /etc/hcr/config 2>/dev/null
         if [ "$P_INJ" == "$pt" ]; then
             systemctl stop hcr-server >/dev/null 2>&1
+            pkill -9 hcr-server >/dev/null 2>&1
             rm -f /etc/hcr/config
         fi
     fi
@@ -108,7 +111,7 @@ liberar_puerto_fantasma() {
 resetear_ssl_completo() {
     echo -e " ${A}⏳ Reseteando SSL (Stunnel4) y eliminando puertos fantasmas...   ${N}"
     if [ -f /etc/stunnel/stunnel.conf ]; then
-        for p_s in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' '); do
+        for p_s in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $NF}' | awk -F':' '{print $NF}' | tr -d ' \n\r'); do
             fuser -k -9 "${p_s}/tcp" >/dev/null 2>&1
             lsof -ti :"$p_s" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
         done
@@ -123,7 +126,7 @@ resetear_ssl_completo() {
 resetear_v2ray_completo() {
     echo -e " ${A}⏳ Reseteando V2Ray / Xray y liberando puertos...   ${N}"
     if [ -f /usr/local/etc/xray/puerto.txt ]; then
-        local p_v=$(cat /usr/local/etc/xray/puerto.txt)
+        local p_v=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
         fuser -k -9 "${p_v}/tcp" >/dev/null 2>&1
         lsof -ti :"$p_v" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
     fi
@@ -139,7 +142,7 @@ resetear_v2ray_completo() {
 resetear_python_completo() {
     echo -e " ${A}⏳ Reseteando Proxy Python y liberando puertos...   ${N}"
     if [ -f /etc/proxy.py ]; then
-        local p_py=$(grep "bind" /etc/proxy.py 2>/dev/null | awk -F',' '{print $2}' | tr -d ' )')
+        local p_py=$(grep "bind" /etc/proxy.py 2>/dev/null | awk -F',' '{print $2}' | tr -d ' )\n\r')
         [ -n "$p_py" ] && fuser -k -9 "${p_py}/tcp" >/dev/null 2>&1
         [ -n "$p_py" ] && lsof -ti :"$p_py" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
     fi
@@ -154,7 +157,7 @@ resetear_python_completo() {
 resetear_ssr_completo() {
     echo -e " ${A}⏳ Reseteando ShadowsocksR y liberando puertos...   ${N}"
     if [ -f /etc/ssr/puerto.txt ]; then
-        local p_ssr=$(cat /etc/ssr/puerto.txt)
+        local p_ssr=$(cat /etc/ssr/puerto.txt | tr -d ' \n\r')
         fuser -k -9 "${p_ssr}/tcp" >/dev/null 2>&1
         fuser -k -9 "${p_ssr}/udp" >/dev/null 2>&1
     fi
@@ -295,7 +298,7 @@ menu_zona_horaria() {
 
 IP_VPS=$(hostname -I | awk '{print $1}'); [ -z "$IP_VPS" ] && IP_VPS="Desconocida"
 es() { systemctl is-active --quiet $1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
-ep() { ss -tlnp | grep -q ":$1 " > /dev/null 2>&1 || ss -ulnp | grep -q ":$1 " > /dev/null 2>&1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
+ep() { ss -tlnp | grep -qE ":$1\b" > /dev/null 2>&1 || ss -ulnp | grep -qE ":$1\b" > /dev/null 2>&1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 
 info_sistema() {
 MEM_TOTAL=$(free -m | awk '/Mem:/ {print $2}')
@@ -325,49 +328,49 @@ agregar_puerto() {
     fi
 }
 
-ss -tlnp | grep -q ":22 " && agregar_puerto "🔹 SSH: ${V}22${N}"
+ss -tlnp | grep -qE ":22\b" && agregar_puerto "🔹 SSH: ${V}22${N}"
 
 # V2RAY Dinámico
-if [ -f /usr/local/etc/xray/puerto.txt ] && systemctl is-active --quiet xray; then
-    PT_V2=$(cat /usr/local/etc/xray/puerto.txt)
-    if ss -tlnp | grep -q ":$PT_V2 "; then
+if [ -f /usr/local/etc/xray/puerto.txt ]; then
+    PT_V2=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
+    if [ -n "$PT_V2" ] && ss -tlnp | grep -qE ":${PT_V2}\b"; then
         agregar_puerto "🔹 V2RAY: ${V}$PT_V2${N}"
     fi
 fi
 
 # SHADOWSOCKS-R Dinámico
-if [ -f /etc/ssr/puerto.txt ] && systemctl is-active --quiet ssr-server; then
-    PT_SSR=$(cat /etc/ssr/puerto.txt)
-    if ss -tlnp | grep -q ":$PT_SSR "; then
+if [ -f /etc/ssr/puerto.txt ]; then
+    PT_SSR=$(cat /etc/ssr/puerto.txt | tr -d ' \n\r')
+    if [ -n "$PT_SSR" ] && ss -tlnp | grep -qE ":${PT_SSR}\b"; then
         agregar_puerto "🔹 SSR: ${V}$PT_SSR${N}"
     fi
 fi
 
 # PROXY PYTHON Dinámico
-if [ -f /etc/proxy.py ] && systemctl is-active --quiet proxypy; then
-    PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )')
-    if [ -n "$PT_PY" ] && ss -tlnp | grep -q ":$PT_PY "; then
-         agregar_puerto "🔹 PROXY: ${V}$PT_PY${N}"
+if [ -f /etc/proxy.py ]; then
+    PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )\n\r')
+    if [ -n "$PT_PY" ] && ss -tlnp | grep -qE ":${PT_PY}\b"; then
+        agregar_puerto "🔹 PROXY: ${V}$PT_PY${N}"
     fi
 fi
 
 # SSL STUNNEL Dinámico
-if [ -f /etc/stunnel/stunnel.conf ] && systemctl is-active --quiet stunnel4; then
-    for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' '); do
-        if ss -tlnp | grep -q ":$p_ssl "; then
+if [ -f /etc/stunnel/stunnel.conf ]; then
+    for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $NF}' | awk -F':' '{print $NF}' | tr -d ' \n\r'); do
+        if [ -n "$p_ssl" ] && ss -tlnp | grep -qE ":${p_ssl}\b"; then
             agregar_puerto "🔹 SSL: ${V}$p_ssl${N}"
         fi
     done
 fi
 
-ss -ulnp | grep -q ":36712 " && agregar_puerto "🔹 UDP: ${V}36712${N}"
-ss -ulnp | grep -q ":5300 " && agregar_puerto "🔹 SlowDNS: ${V}5300${N}"
-ss -tlnp | grep -q ":7300" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
-ss -tlnp | grep -q ":7200" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
+ss -ulnp | grep -qE ":36712\b" && agregar_puerto "🔹 UDP: ${V}36712${N}"
+ss -ulnp | grep -qE ":5300\b" && agregar_puerto "🔹 SlowDNS: ${V}5300${N}"
+ss -tlnp | grep -qE ":7300\b" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
+ss -tlnp | grep -qE ":7200\b" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
 
 if [ -f /etc/hcr/config ]; then
     source /etc/hcr/config
-    if ss -tlnp | grep -qw "$P_INJ"; then
+    if [ -n "$P_INJ" ] && ss -tlnp | grep -qE ":${P_INJ}\b"; then
         agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
     else
         agregar_puerto "🔹 HCR: ${R}CERRADO ($P_INJ)${N}"
@@ -494,15 +497,15 @@ fi
 echo -e " ${W}* Puertas Activas en su Servidor *   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 STR_P=""
-ss -tlnp | grep -q ":22 " && STR_P+="${W}🔹 SSH:  ${V}22${N}   "
-if ss -tlnp | grep -q ":80 "; then
+ss -tlnp | grep -qE ":22\b" && STR_P+="${W}🔹 SSH:  ${V}22${N}   "
+if ss -tlnp | grep -qE ":80\b"; then
     systemctl is-active --quiet xray && grep -q '"port": 80' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="${W}🔹 V2RAY:  ${V}80${N}   " || STR_P+="${W}🔹 PROXY:  ${V}80${N}   "
 fi
-if ss -tlnp | grep -q ":443 "; then
+if ss -tlnp | grep -qE ":443\b"; then
     systemctl is-active --quiet xray && grep -q '"port": 443' /usr/local/etc/xray/config.json 2>/dev/null && STR_P+="${W}🔹 V2RAY:  ${V}443${N}   " || STR_P+="${W}🔹 SSL:  ${V}443${N}   "
 fi
-ss -ulnp | grep -q ":36712" && STR_P+="${W}🔹 UDP:  ${V}36712${N}   "
-ss -ulnp | grep -q ":5300" && STR_P+="${W}🔹 SlowDNS:  ${V}5300${N}   "
+ss -ulnp | grep -qE ":36712\b" && STR_P+="${W}🔹 UDP:  ${V}36712${N}   "
+ss -ulnp | grep -qE ":5300\b" && STR_P+="${W}🔹 SlowDNS:  ${V}5300${N}   "
 [ -z "$STR_P" ] && STR_P="${W}🔹  ${R}Sin puertos configurados   ${N}"
 echo -e " $STR_P"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
@@ -556,15 +559,12 @@ systemctl stop stunnel4 >/dev/null 2>&1
 pkill -9 stunnel4 >/dev/null 2>&1
 liberar_puerto_fantasma "$p2" "ssl"
 
-mkdir -p /etc/stunnel /var/run/stunnel4
-chown -R stunnel4:stunnel4 /var/run/stunnel4 2>/dev/null || chmod 777 /var/run/stunnel4 2>/dev/null
-rm -f /var/run/stunnel4.pid /var/run/stunnel4/stunnel.pid
-
+mkdir -p /etc/stunnel
 openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=ZeroDay/O=VPN/C=CO" >/dev/null 2>&1
 chmod 600 /etc/stunnel/stunnel.pem
 
 cat <<EOF > /etc/stunnel/stunnel.conf
-pid = /var/run/stunnel4/stunnel.pid
+foreground = yes
 cert = /etc/stunnel/stunnel.pem
 client = no
 socket = a:SO_REUSEADDR=1
@@ -576,6 +576,21 @@ accept = $p2
 connect = 127.0.0.1:$p1
 EOF
 
+cat << 'EOF_S' > /etc/systemd/system/stunnel4.service
+[Unit]
+Description=SSL Tunnel Native Service (ZeroDay)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/stunnel4 /etc/stunnel/stunnel.conf
+Restart=always
+RestartSec=2
+
+[Install]
+WantedBy=multi-user.target
+EOF_S
+
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
 ufw allow $p2/tcp >/dev/null 2>&1
 systemctl daemon-reload
@@ -583,8 +598,8 @@ systemctl enable stunnel4 >/dev/null 2>&1
 systemctl restart stunnel4
 sleep 1
 
-if systemctl is-active --quiet stunnel4; then
-    echo -e " ${V}¡SSL instalado y activo en puerto externo $p2!   ${N}"
+if systemctl is-active --quiet stunnel4 && ss -tlnp | grep -qE ":${p2}\b"; then
+    echo -e " ${V}¡SSL instalado y activo al instante en puerto externo $p2!   ${N}"
 else
     echo -e " ${R}ERROR: Stunnel4 no pudo iniciar en el puerto $p2. Usa la Opción 6 para resetear.   ${N}"
 fi
@@ -619,9 +634,10 @@ liberar_puerto_fantasma "$p_ext" "ssl"
 
 echo -e "\n[stunnel-extra-$p_ext]\naccept = $p_ext\nconnect = 127.0.0.1:$p_int" >> /etc/stunnel/stunnel.conf
 ufw allow $p_ext/tcp >/dev/null 2>&1
+systemctl daemon-reload
 systemctl restart stunnel4
 sleep 1
-if systemctl is-active --quiet stunnel4; then
+if systemctl is-active --quiet stunnel4 && ss -tlnp | grep -qE ":${p_ext}\b"; then
     echo -e "\n ${V}¡Puerto SSL $p_ext adicionado exitosamente y redirigiendo al $p_int!   ${N}"
 else
     echo -e "\n ${R}Error al levantar el puerto $p_ext. Verifica que no esté ocupado.   ${N}"
@@ -637,7 +653,7 @@ fi
 clear
 echo -e "${C}=== ELIMINAR PUERTO SSL ===   ${N}"
 echo -e " ${W}Puertos SSL actualmente activos:   ${N}"
-PUERTOS_ACTUALES=$(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' ')
+PUERTOS_ACTUALES=$(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $NF}' | awk -F':' '{print $NF}' | tr -d ' \n\r')
 if [ -z "$PUERTOS_ACTUALES" ]; then
     echo -e " ${R}No se encontraron puertos configurados.   ${N}"
 else
@@ -679,7 +695,7 @@ fi
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
 4) systemctl stop stunnel4 >/dev/null 2>&1; pkill -9 stunnel4 >/dev/null 2>&1; echo -e " ${A}Detenido y puertos liberados.   ${N}"; read -p " Enter..." ;;
-5) resetear_ssl_completo; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+5) resetear_ssl_completo; rm -f /etc/systemd/system/stunnel4.service; systemctl daemon-reload; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
 6) resetear_ssl_completo; read -p " Enter..." ;;
 0) break ;;
 *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1 ;;
@@ -909,7 +925,7 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF
 
-    PT_NOW=$(cat /etc/ssr/puerto.txt)
+    PT_NOW=$(cat /etc/ssr/puerto.txt | tr -d ' \n\r')
     liberar_puerto_fantasma "$PT_NOW" "ssr"
 
     systemctl daemon-reload
@@ -957,7 +973,7 @@ while true; do
                 sleep 2
             else
                 if [ -f /etc/ssr/puerto.txt ]; then
-                    OLD_SSR_PT=$(cat /etc/ssr/puerto.txt)
+                    OLD_SSR_PT=$(cat /etc/ssr/puerto.txt | tr -d ' \n\r')
                     fuser -k -9 "${OLD_SSR_PT}/tcp" >/dev/null 2>&1
                 fi
                 configurar_cuenta_ssr
@@ -1094,8 +1110,8 @@ done
 menu_badvpn() {
 while true; do
 clear
-P_BAD72=$(ss -tlnp | grep -q ":7200" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
-P_BAD73=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+P_BAD72=$(ss -tlnp | grep -qE ":7200\b" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+P_BAD73=$(ss -tlnp | grep -qE ":7300\b" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 echo -e "${A}--- BADVPN UDP (VIDEOLLAMADAS) ---   ${N}"
 echo -e " ${W}Estado: 7200${N} $P_BAD72 ${W}| 7300${N} $P_BAD73"
 echo -e "${C}----------------------------------------${N}"
@@ -1166,7 +1182,7 @@ if [ -x /usr/bin/badvpn-udpgw ]; then
     systemctl restart badvpn7200 >/dev/null 2>&1
     
     sleep 2
-    if ss -tlnp | grep -q ":7300"; then
+    if ss -tlnp | grep -qE ":7300\b"; then
         echo -e " ${V}¡BadVPN activado exitosamente en los puertos 7200 y 7300!   ${N}"
     else
         echo -e " ${R}Fallo al encender el servicio. Revisa los permisos del sistema.   ${N}"
@@ -1290,7 +1306,7 @@ EOF
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; read -p " Enter..."; continue
     fi
-    pt_actual=$(cat /usr/local/etc/xray/puerto.txt)
+    pt_actual=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
     echo -e "\n${C}=== MODIFICAR PUERTO V2RAY ===   ${N}"
     echo -e " ${W}🔹 Puerto actual:  ${N}${V}$pt_actual   ${N}"
     echo -ne " ${W}► Ingresa el NUEVO puerto a usar (Ej: 80, 443):   ${N}"; read pt_nuevo
@@ -1503,7 +1519,7 @@ EOF
     ufw allow $p_inj/tcp >/dev/null 2>&1
     
     sleep 3
-    if ss -tlnp | grep -qw "$p_inj"; then
+    if ss -tlnp | grep -qE ":${p_inj}\b"; then
         echo -e "\n ${V}¡ÉXITO! El motor HCR encendió y el puerto $p_inj está verificado como ABIERTO.   ${N}"
     else
         echo -e "\n ${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.   ${N}"
@@ -1877,7 +1893,7 @@ menu_protocolos() {
 while true; do
 clear
 P22=$(ep 22); P80=$(es proxypy); PSSL=$(es stunnel4); PPY=$(es proxypy); PUDP=$(es udp-custom); PFB=$(es fail2ban)
-PBAD=$(ss -tlnp | grep -q ":7300" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+PBAD=$(ss -tlnp | grep -qE ":7300\b" && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 PHCR=$(es hcr-server)
 PDNS=$(es slowdns)
