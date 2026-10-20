@@ -6,6 +6,13 @@
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 export DEBIAN_FRONTEND=noninteractive
 
+# Sincronización automática de reloj en cada ejecución (Vital para V2Ray/VMess)
+timedatectl set-ntp true >/dev/null 2>&1
+apt-get update -y >/dev/null 2>&1
+apt-get install -y systemd-timesyncd chrony ntpdate 2>/dev/null
+ntpdate -u pool.ntp.org >/dev/null 2>&1 || true
+systemctl restart systemd-timesyncd chrony >/dev/null 2>&1
+
 # Asegurar archivo de registro para comando 'last' en Debian 12 / Ubuntu 24.04+
 [ ! -f /var/log/wtmp ] && touch /var/log/wtmp 2>/dev/null
 
@@ -20,10 +27,8 @@ fi
 # ==========================================
 # CEREBRO DE COLORES EXTENDIDOS 256 (NEÓN PURO MÁXIMO)
 # ==========================================
-# Colores por defecto (Paleta 256: Cyan 51, Verde 46, Amarillo 226, Rojo 196)
 C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
 
-# Si el usuario ya eligió un tema antes, el script lo lee y aplica los colores
 if [ -f /etc/zeroday_tema.conf ]; then
     source /etc/zeroday_tema.conf
 fi
@@ -210,7 +215,6 @@ d=${d:-30}
 echo -ne " ${W}► Límite de conexiones [Default: 1]:   ${N}"; read l
 l=${l:-1}
 
-# Asegurar que SSH permita contraseñas en cualquier plantilla Ubuntu/Debian
 if [ -f /etc/ssh/sshd_config ]; then
     sed -i 's/^#*PasswordAuthentication .*/PasswordAuthentication yes/g' /etc/ssh/sshd_config 2>/dev/null
     grep -q "^PasswordAuthentication yes" /etc/ssh/sshd_config || echo "PasswordAuthentication yes" >> /etc/ssh/sshd_config
@@ -328,7 +332,6 @@ EOF
 
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
 
-# Servicio SystemD directo compatible con todas las versiones de Debian y Ubuntu
 cat << 'EOF_STUNNEL_SVC' > /etc/systemd/system/stunnel4.service
 [Unit]
 Description=SSL Tunnel (ZeroDay)
@@ -347,6 +350,7 @@ RestartSec=3
 WantedBy=multi-user.target
 EOF_STUNNEL_SVC
 
+killall -9 stunnel4 2>/dev/null
 fuser -k -9 $p2/tcp >/dev/null 2>&1
 iptables -I INPUT -p tcp --dport $p2 -j ACCEPT 2>/dev/null
 ufw allow $p2/tcp >/dev/null 2>&1
@@ -367,6 +371,7 @@ echo -ne " ${W}► NUEVO Puerto SSL a escuchar (Ej: 444, 445):   ${N}"; read p_e
 if [ -z "$p_ext" ]; then
     echo -e " ${R}Cancelado.  ${N}"; read -p " Enter..."; continue
 fi
+fuser -k -9 $p_ext/tcp >/dev/null 2>&1
 echo -e "\n[stunnel-extra-$p_ext]\naccept = $p_ext\nconnect = 127.0.0.1:$p_int" >> /etc/stunnel/stunnel.conf
 iptables -I INPUT -p tcp --dport $p_ext -j ACCEPT 2>/dev/null
 ufw allow $p_ext/tcp >/dev/null 2>&1
@@ -403,15 +408,21 @@ if grep -q "accept = $p_del" /etc/stunnel/stunnel.conf; then
     sed -i "/^$BLOQUE_ESC$/,/^connect =/d" /etc/stunnel/stunnel.conf
     
     ufw delete allow $p_del/tcp >/dev/null 2>&1
-    systemctl restart stunnel4
-    echo -e "\n ${V}¡Puerto SSL $p_del eliminado exitosamente!   ${N}"
+    systemctl stop stunnel4 2>/dev/null
+    killall -9 stunnel4 2>/dev/null
+    fuser -k -9 $p_del/tcp >/dev/null 2>&1
+    
+    if grep -q '^accept' /etc/stunnel/stunnel.conf; then
+        systemctl start stunnel4 2>/dev/null
+    fi
+    echo -e "\n ${V}¡Puerto SSL $p_del eliminado y liberado al 100%!   ${N}"
 else
     echo -e "\n ${R}El puerto $p_del no existe en la configuración.   ${N}"
 fi
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
-4) systemctl stop stunnel4; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-5) systemctl stop stunnel4; systemctl disable stunnel4 >/dev/null 2>&1; rm -f /etc/systemd/system/stunnel4.service; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; systemctl daemon-reload; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+4) systemctl stop stunnel4; killall -9 stunnel4 2>/dev/null; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
+5) systemctl stop stunnel4; killall -9 stunnel4 2>/dev/null; systemctl disable stunnel4 >/dev/null 2>&1; rm -f /etc/systemd/system/stunnel4.service; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; systemctl daemon-reload; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
 0) break ;;
 *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1 ;;
 esac
@@ -744,8 +755,8 @@ case $op_py in
 3)
 echo -ne " ${W}► Puerto para el WebSocket (Ej: 80):   ${N}"; read pt; pt=${pt:-80}
 echo -e " ${A}Liberando el puerto $pt y preparando Python...   ${N}"
-systemctl stop apache2 nginx dropbear 2>/dev/null
-fuser -k $pt/tcp 2>/dev/null
+systemctl stop apache2 nginx 2>/dev/null
+fuser -k -9 $pt/tcp 2>/dev/null
 apt-get install python3 psmisc -y >/dev/null 2>&1
 cat << 'EOF_PY' > /etc/proxy.py
 import socket, threading
@@ -824,7 +835,6 @@ echo -e "[Unit]\nDescription=UDP Custom\nAfter=network.target\n[Service]\nUser=r
 systemctl daemon-reload; systemctl enable udp-custom >/dev/null 2>&1; systemctl restart udp-custom
 iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null
 iptables -t nat -A PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712
-# Proteger puertos de SlowDNS si está activo
 if [ -f /etc/slowdns/start_dns.sh ]; then
     systemctl restart slowdns 2>/dev/null
 fi
@@ -960,25 +970,39 @@ case $op_v2 in
 1)
     clear
     echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY OFICIAL) ===   ${N}"
+    # Sincronización exacta de hora previa a la instalación de Xray
+    timedatectl set-ntp true >/dev/null 2>&1
     apt-get update -y >/dev/null 2>&1
-    apt-get install -y jq uuid-runtime curl psmisc lsof openssl >/dev/null 2>&1
+    apt-get install -y jq uuid-runtime curl psmisc lsof openssl systemd-timesyncd chrony >/dev/null 2>&1
+    systemctl restart systemd-timesyncd chrony >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===   ${N}"
     echo -ne " ${W}► Puerto a usar (Recomendado: 443):   ${N}"; read pt_v2; pt_v2=${pt_v2:-443}
-    echo -ne " ${W}► Tu Dominio del Servidor (Ej: movistar.zex.digital):   ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
+    echo -ne " ${W}► Tu Dominio o Bug Host (Enter = $IP_VPS):   ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
     UUID=$(cat /proc/sys/kernel/random/uuid 2>/dev/null || uuidgen)
     
-    systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
+    systemctl stop apache2 nginx 2>/dev/null
+    if [ -f /etc/stunnel/stunnel.conf ] && grep -q "accept = $pt_v2" /etc/stunnel/stunnel.conf; then
+        systemctl stop stunnel4 2>/dev/null
+        killall -9 stunnel4 2>/dev/null
+    fi
     fuser -k -9 $pt_v2/tcp >/dev/null 2>&1
     lsof -ti tcp:$pt_v2 | xargs kill -9 2>/dev/null
-    sleep 2
+    sleep 1
     
     mkdir -p /usr/local/etc/xray
     openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=$dom_v2" >/dev/null 2>&1
     chmod 644 /usr/local/etc/xray/private.key /usr/local/etc/xray/cert.crt
     
-    # Asegurar que Xray corra como root en Ubuntu/Debian para leer certificados y puertos bajos
+    mkdir -p /etc/systemd/system/xray.service.d
+    cat << 'EOF_XRAY_ROOT' > /etc/systemd/system/xray.service.d/override.conf
+[Service]
+User=root
+Group=root
+ExecStart=
+ExecStart=/usr/local/bin/xray run -config /usr/local/etc/xray/config.json
+EOF_XRAY_ROOT
     sed -i 's/User=nobody/User=root/g' /etc/systemd/system/xray.service 2>/dev/null
     sed -i 's/User=nobody/User=root/g' /etc/systemd/system/xray.service.d/*.conf 2>/dev/null
     
@@ -996,6 +1020,7 @@ case $op_v2 in
       "network": "ws",
       "security": "tls",
       "tlsSettings": {
+        "allowInsecure": true,
         "certificates": [
           {
             "certificateFile": "/usr/local/etc/xray/cert.crt",
@@ -1013,17 +1038,17 @@ EOF
     echo "$pt_v2" > /usr/local/etc/xray/puerto.txt
     echo "$UUID" > /usr/local/etc/xray/uuid.txt
     
-    systemctl daemon-reload
-    systemctl restart xray
-    systemctl enable xray >/dev/null 2>&1
-    iptables -I INPUT -p tcp --dport $pt_v2 -j ACCEPT 2>/dev/null
+    iptables -I INPUT 1 -p tcp --dport $pt_v2 -j ACCEPT 2>/dev/null
     ufw allow $pt_v2/tcp >/dev/null 2>&1
+    systemctl daemon-reload
+    systemctl enable xray >/dev/null 2>&1
+    systemctl restart xray
     
     sleep 2
-    if systemctl is-active --quiet xray; then
-        echo -e "\n ${V}¡V2Ray Instalado y Activo con TLS!   ${N}"
+    if systemctl is-active --quiet xray && ss -tlnp 2>/dev/null | grep -q ":$pt_v2 "; then
+        echo -e "\n ${V}¡V2Ray Instalado y Escuchando en el Puerto $pt_v2 con TLS!   ${N}"
     else
-        echo -e "\n ${R}ERROR: V2Ray no pudo iniciar.   ${N}"
+        echo -e "\n ${R}ERROR: V2Ray no pudo abrir el puerto $pt_v2.   ${N}"
     fi
     echo -ne " ${W}► Enter para continuar...   ${N}"; read ;;
 2)
@@ -1049,21 +1074,25 @@ EOF
         echo -e " ${R}Cancelado.   ${N}"; read -p " Enter..."; continue
     fi
     
-    systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
+    systemctl stop apache2 nginx 2>/dev/null
+    if [ -f /etc/stunnel/stunnel.conf ] && grep -q "accept = $pt_nuevo" /etc/stunnel/stunnel.conf; then
+        systemctl stop stunnel4 2>/dev/null
+        killall -9 stunnel4 2>/dev/null
+    fi
     fuser -k -9 $pt_nuevo/tcp >/dev/null 2>&1
     lsof -ti tcp:$pt_nuevo | xargs kill -9 2>/dev/null
     
     sed -i -E "s/\"port\": [0-9]+/\"port\": $pt_nuevo/" /usr/local/etc/xray/config.json
     echo "$pt_nuevo" > /usr/local/etc/xray/puerto.txt
-    iptables -I INPUT -p tcp --dport $pt_nuevo -j ACCEPT 2>/dev/null
+    iptables -I INPUT 1 -p tcp --dport $pt_nuevo -j ACCEPT 2>/dev/null
     ufw allow $pt_nuevo/tcp >/dev/null 2>&1
     systemctl restart xray
     
     sleep 2
-    if systemctl is-active --quiet xray; then
+    if systemctl is-active --quiet xray && ss -tlnp 2>/dev/null | grep -q ":$pt_nuevo "; then
         echo -e "\n ${V}¡Puerto modificado exitosamente al $pt_nuevo!   ${N}"
     else
-        echo -e "\n ${R}ERROR: El puerto $pt_nuevo está bloqueado por el sistema. Intenta con otro.   ${N}"
+        echo -e "\n ${R}ERROR: El puerto $pt_nuevo está bloqueado por otro proceso.   ${N}"
     fi
     echo -ne " ${W}► Enter para continuar...   ${N}"; read ;;
 4)
@@ -1078,7 +1107,7 @@ EOF
 {
   "v": "2",
   "ps": "ZeroDay-V2Ray",
-  "add": "$dom_v2",
+  "add": "$IP_VPS",
   "port": "$pt_v2",
   "id": "$UUID",
   "aid": "0",
@@ -1089,20 +1118,22 @@ EOF
   "path": "/zeroday",
   "tls": "tls",
   "sni": "$dom_v2",
+  "allowInsecure": true,
   "alpn": ""
 }
 EOF
-    VMESS_BASE64=$(cat /tmp/vmess.json | base64 -w 0)
+    VMESS_BASE64=$(base64 -w 0 < /tmp/vmess.json)
     VMESS_LINK="vmess://$VMESS_BASE64"
     
     clear
     echo -e "${C}=== TUS DATOS DE V2RAY ===   ${N}"
-    echo -e " ${W}🔹 Dominio Server :  ${N}${V}$dom_v2   ${N}"
+    echo -e " ${W}🔹 IP Servidor    :  ${N}${V}$IP_VPS   ${N}"
+    echo -e " ${W}🔹 Dominio / SNI  :  ${N}${V}$dom_v2   ${N}"
     echo -e " ${W}🔹 Puerto         :  ${N}${V}$pt_v2   ${N}"
     echo -e " ${W}🔹 UUID           :  ${N}${A}$UUID   ${N}"
     echo -e " ${W}🔹 Protocolo      : WebSocket (WS)   ${N}"
     echo -e " ${W}🔹 Path           : /zeroday   ${N}"
-    echo -e " ${W}🔹 Seguridad      : TLS (Activada)   ${N}"
+    echo -e " ${W}🔹 Seguridad      : TLS (AllowInsecure: True)   ${N}"
     echo -e "${C}================================================${N}"
     echo -e " 🔗  ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):   ${N}\n"
     echo -e " ${A}$VMESS_LINK   ${N}\n"
@@ -1111,7 +1142,7 @@ EOF
     systemctl stop xray >/dev/null 2>&1
     systemctl disable xray >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove >/dev/null 2>&1
-    rm -rf /usr/local/etc/xray
+    rm -rf /usr/local/etc/xray /etc/systemd/system/xray.service.d
     echo -e " ${R}V2Ray / Xray Desinstalado completamente.   ${N}"
     echo -ne " ${W}► Enter para continuar...   ${N}"; read ;;
 0) break ;;
@@ -1272,7 +1303,6 @@ EOF
 # MOTOR DE REPARACIÓN Y BLINDAJE SLOWDNS
 # ==========================================
 reparar_red_slowdns() {
-    # 1. Liberar puerto 53 de systemd-resolved en Ubuntu/Debian sin perder DNS
     if [ -f /etc/systemd/resolved.conf ]; then
         sed -i 's/^#*DNS=.*/DNS=8.8.8.8 1.1.1.1/g' /etc/systemd/resolved.conf 2>/dev/null
         sed -i 's/^#*DNSStubListener=.*/DNSStubListener=no/g' /etc/systemd/resolved.conf 2>/dev/null
@@ -1282,7 +1312,6 @@ reparar_red_slowdns() {
     rm -f /etc/resolv.conf 2>/dev/null
     echo -e "nameserver 8.8.8.8\nnameserver 1.1.1.1" > /etc/resolv.conf
 
-    # 2. Optimizar OpenSSH para que acepte túneles lentos de SlowDNS y algoritmos de HTTP Custom
     if [ -f /etc/ssh/sshd_config ]; then
         sed -i '/^#*UseDNS /d' /etc/ssh/sshd_config
         sed -i '/^#*MaxStartups /d' /etc/ssh/sshd_config
@@ -1297,7 +1326,6 @@ EOF_SSH
         systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1
     fi
 
-    # 3. Crear lanzador persistente que blinda IPtables por encima de UDP Custom
     cat << 'EOF_START_DNS' > /etc/slowdns/start_dns.sh
 #!/bin/bash
 export PATH="/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
@@ -1305,13 +1333,11 @@ DOM_NS=$(tr -d ' \n\r' < /etc/slowdns/ns_domain.txt)
 PT_LOC=$(tr -d ' \n\r' < /etc/slowdns/puerto_local.txt)
 [ -z "$PT_LOC" ] && PT_LOC=22
 
-# Limpiar duplicados previos
 while iptables -D INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null; do :; done
 while iptables -D INPUT -p udp --dport 53 -j ACCEPT 2>/dev/null; do :; done
 while iptables -t nat -D PREROUTING -p udp --dport 5300 -j ACCEPT 2>/dev/null; do :; done
 while iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null; do :; done
 
-# Inyectar en la posición #1 para que UDP Custom (1:65535) nunca secuestre el tráfico DNS
 iptables -I INPUT 1 -p udp --dport 5300 -j ACCEPT
 iptables -I INPUT 1 -p udp --dport 53 -j ACCEPT
 iptables -t nat -I PREROUTING 1 -p udp --dport 5300 -j ACCEPT
@@ -1675,9 +1701,7 @@ EOF
                 ;;
             0) break ;;
             *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1; continue ;;
-        esac
-        
-        # Recargar configuración inmediatamente
+        es:
         source /etc/zeroday_tema.conf
         echo -e "\n ${V}¡Tema Neón aplicado con éxito!   ${N}"
         sleep 1
