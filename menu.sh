@@ -11,6 +11,288 @@ if [ -f /etc/zeroday_tema.conf ]; then
     source /etc/zeroday_tema.conf
 fi
 
+# ==========================================
+# SINCRONIZACIÓN AUTOMÁTICA DE ZONA HORARIA (HORA DEL CELULAR)
+# ==========================================
+sincronizar_hora_celular() {
+    local ZONA_DEFAULT="America/Bogota"
+    if [ -f /etc/zeroday_tz.conf ]; then
+        ZONA_DEFAULT=$(cat /etc/zeroday_tz.conf)
+    fi
+    local ZONA_ACT=$(timedatectl 2>/dev/null | grep "Time zone" | awk '{print $3}')
+    if [ "$ZONA_ACT" != "$ZONA_DEFAULT" ]; then
+        timedatectl set-timezone "$ZONA_DEFAULT" >/dev/null 2>&1
+        ln -sf "/usr/share/zoneinfo/$ZONA_DEFAULT" /etc/localtime >/dev/null 2>&1
+        timedatectl set-ntp true >/dev/null 2>&1
+    fi
+}
+sincronizar_hora_celular
+
+# ==========================================
+# MOTOR ANTI-PUERTOS FANTASMAS Y RESETEADOR PROFUNDO
+# ==========================================
+liberar_puerto_fantasma() {
+    local pt=$1
+    local conservar=$2
+    [ -z "$pt" ] && return
+
+    # 1. Matar cualquier proceso colgado en TCP/UDP en ese puerto
+    fuser -k -9 "${pt}/tcp" >/dev/null 2>&1
+    fuser -k -9 "${pt}/udp" >/dev/null 2>&1
+    if command -v lsof >/dev/null 2>&1; then
+        local pids=$(lsof -ti :"$pt" 2>/dev/null)
+        [ -n "$pids" ] && kill -9 $pids >/dev/null 2>&1
+    fi
+    local ss_pids=$(ss -lptn "sport = :$pt" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u)
+    [ -n "$ss_pids" ] && kill -9 $ss_pids >/dev/null 2>&1
+
+    # 2. Si otro protocolo tenía guardado ese mismo puerto en sus archivos, limpiarlo para que no vuelva a chocar
+    if [ "$conservar" != "v2ray" ] && [ -f /usr/local/etc/xray/puerto.txt ]; then
+        if [ "$(cat /usr/local/etc/xray/puerto.txt 2>/dev/null)" == "$pt" ]; then
+            systemctl stop xray >/dev/null 2>&1
+            pkill -9 xray >/dev/null 2>&1
+            rm -f /usr/local/etc/xray/puerto.txt
+        fi
+    fi
+
+    if [ "$conservar" != "ssl" ] && [ -f /etc/stunnel/stunnel.conf ]; then
+        if grep -qE "^accept[[:space:]]*=[[:space:]]*$pt$" /etc/stunnel/stunnel.conf 2>/dev/null; then
+            systemctl stop stunnel4 >/dev/null 2>&1
+            pkill -9 stunnel4 >/dev/null 2>&1
+            awk -v p="$pt" '
+            BEGIN { RS=""; FS="\n" }
+            {
+                keep=1
+                for(i=1; i<=NF; i++) {
+                    if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0
+                }
+                if (keep) print $0 "\n"
+            }' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
+            mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
+            if grep -q '^accept' /etc/stunnel/stunnel.conf 2>/dev/null; then
+                systemctl start stunnel4 >/dev/null 2>&1
+            fi
+        fi
+    fi
+
+    if [ "$conservar" != "python" ] && [ -f /etc/proxy.py ]; then
+        local pt_py=$(grep "bind" /etc/proxy.py 2>/dev/null | awk -F',' '{print $2}' | tr -d ' )')
+        if [ "$pt_py" == "$pt" ]; then
+            systemctl stop proxypy >/dev/null 2>&1
+            rm -f /etc/proxy.py /etc/systemd/system/proxypy.service
+            systemctl daemon-reload
+        fi
+    fi
+
+    if [ "$conservar" != "ssr" ] && [ -f /etc/ssr/puerto.txt ]; then
+        if [ "$(cat /etc/ssr/puerto.txt 2>/dev/null)" == "$pt" ]; then
+            systemctl stop ssr-server >/dev/null 2>&1
+            rm -f /etc/ssr/puerto.txt
+        fi
+    fi
+
+    if [ "$conservar" != "hcr" ] && [ -f /etc/hcr/config ]; then
+        source /etc/hcr/config 2>/dev/null
+        if [ "$P_INJ" == "$pt" ]; then
+            systemctl stop hcr-server >/dev/null 2>&1
+            rm -f /etc/hcr/config
+        fi
+    fi
+
+    # Matar nuevamente por si algún servicio intentó revivir durante el cierre
+    fuser -k -9 "${pt}/tcp" >/dev/null 2>&1
+    lsof -ti :"$pt" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
+    sleep 0.5
+}
+
+resetear_ssl_completo() {
+    echo -e " ${A}⏳ Reseteando SSL (Stunnel4) y eliminando puertos fantasmas...   ${N}"
+    if [ -f /etc/stunnel/stunnel.conf ]; then
+        for p_s in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' '); do
+            fuser -k -9 "${p_s}/tcp" >/dev/null 2>&1
+            lsof -ti :"$p_s" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
+        done
+    fi
+    systemctl stop stunnel4 >/dev/null 2>&1
+    pkill -9 stunnel4 >/dev/null 2>&1
+    rm -f /etc/stunnel/stunnel.conf /var/run/stunnel4.pid /var/run/stunnel4/stunnel.pid
+    systemctl daemon-reload
+    echo -e " ${V}✓ Puertos y rastros de SSL (Stunnel4) eliminados por completo.   ${N}"
+}
+
+resetear_v2ray_completo() {
+    echo -e " ${A}⏳ Reseteando V2Ray / Xray y liberando puertos...   ${N}"
+    if [ -f /usr/local/etc/xray/puerto.txt ]; then
+        local p_v=$(cat /usr/local/etc/xray/puerto.txt)
+        fuser -k -9 "${p_v}/tcp" >/dev/null 2>&1
+        lsof -ti :"$p_v" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
+    fi
+    systemctl stop xray >/dev/null 2>&1
+    systemctl stop v2ray >/dev/null 2>&1
+    pkill -9 xray >/dev/null 2>&1
+    pkill -9 v2ray >/dev/null 2>&1
+    rm -f /usr/local/etc/xray/puerto.txt /usr/local/etc/xray/config.json
+    systemctl daemon-reload
+    echo -e " ${V}✓ Puertos y rastros de V2Ray/Xray reseteados por completo.   ${N}"
+}
+
+resetear_python_completo() {
+    echo -e " ${A}⏳ Reseteando Proxy Python y liberando puertos...   ${N}"
+    if [ -f /etc/proxy.py ]; then
+        local p_py=$(grep "bind" /etc/proxy.py 2>/dev/null | awk -F',' '{print $2}' | tr -d ' )')
+        [ -n "$p_py" ] && fuser -k -9 "${p_py}/tcp" >/dev/null 2>&1
+        [ -n "$p_py" ] && lsof -ti :"$p_py" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
+    fi
+    systemctl stop proxypy >/dev/null 2>&1
+    systemctl disable proxypy >/dev/null 2>&1
+    pkill -9 -f "/etc/proxy.py" >/dev/null 2>&1
+    rm -f /etc/proxy.py /etc/systemd/system/proxypy.service
+    systemctl daemon-reload
+    echo -e " ${V}✓ Puertos y rastros de Proxy Python reseteados por completo.   ${N}"
+}
+
+resetear_ssr_completo() {
+    echo -e " ${A}⏳ Reseteando ShadowsocksR y liberando puertos...   ${N}"
+    if [ -f /etc/ssr/puerto.txt ]; then
+        local p_ssr=$(cat /etc/ssr/puerto.txt)
+        fuser -k -9 "${p_ssr}/tcp" >/dev/null 2>&1
+        fuser -k -9 "${p_ssr}/udp" >/dev/null 2>&1
+    fi
+    systemctl stop ssr-server >/dev/null 2>&1
+    pkill -9 -f "shadowsocksr" >/dev/null 2>&1
+    rm -f /etc/ssr/puerto.txt /etc/ssr/config.json /etc/ssr/datos.conf
+    systemctl daemon-reload
+    echo -e " ${V}✓ Puertos y rastros de ShadowsocksR reseteados por completo.   ${N}"
+}
+
+resetear_hcr_completo() {
+    echo -e " ${A}⏳ Reseteando HCR Server y liberando puertos...   ${N}"
+    if [ -f /etc/hcr/config ]; then
+        source /etc/hcr/config 2>/dev/null
+        [ -n "$P_INJ" ] && fuser -k -9 "${P_INJ}/tcp" >/dev/null 2>&1
+    fi
+    systemctl stop hcr-server >/dev/null 2>&1
+    pkill -9 hcr-server >/dev/null 2>&1
+    rm -rf /etc/hcr /etc/systemd/system/hcr-server.service
+    systemctl daemon-reload
+    echo -e " ${V}✓ Puertos y rastros de HCR Server reseteados por completo.   ${N}"
+}
+
+menu_limpiador_puertos() {
+    while true; do
+        clear
+        echo -e "${C}================================================${N}"
+        echo -e "   ${A}🧹 LIMPIADOR Y RESETEADOR DE PUERTOS FANTASMAS 🧹   ${N}"
+        echo -e "${C}================================================${N}"
+        echo -e " ${W}Elimina rastros de puertos que quedaron bloqueados.${N}"
+        echo -e "${C}────────────────────────────────────────────────────────${N}"
+        echo -e " ${V}[1]${N} ${W}🎯 Destrabar un Puerto Específico (Ej: 443, 80, 8080)   ${N}"
+        echo -e " ${V}[2]${N} ${W}🔒 Resetear Puertos de SSL (Stunnel4)   ${N}"
+        echo -e " ${V}[3]${N} ${W}🚀 Resetear Puertos de V2Ray / Xray   ${N}"
+        echo -e " ${V}[4]${N} ${W}🐍 Resetear Puertos de Proxy Python   ${N}"
+        echo -e " ${V}[5]${N} ${W}🛡️ Resetear Puertos de ShadowsocksR (SSR)   ${N}"
+        echo -e " ${V}[6]${N} ${W}💉 Resetear Puertos de HCR Server   ${N}"
+        echo -e " ${R}[7]${N} ${W}🔥 RESETEAR TODOS LOS PUERTOS Y PROTOCOLOS (LIMPIEZA TOTAL)   ${N}"
+        echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
+        echo -e "${C}================================================${N}"
+        echo -ne " ${W}► Opcion :   ${N}"; read op_clean
+
+        case $op_clean in
+            1)
+                echo -ne "\n ${W}► Ingresa el puerto fantasma a limpiar (Ej: 443):   ${N}"; read pt_clean
+                if [[ "$pt_clean" =~ ^[0-9]+$ ]] && [ "$pt_clean" != "22" ]; then
+                    echo -e " ${A}⏳ Eliminando todo rastro del puerto $pt_clean...   ${N}"
+                    liberar_puerto_fantasma "$pt_clean" "ninguno"
+                    echo -e " ${V}¡Puerto $pt_clean completamente limpio y libre para usar!   ${N}"
+                else
+                    echo -e " ${R}Puerto inválido o protegido (22).   ${N}"
+                fi
+                echo -ne " ${W}► Enter para continuar...   ${N}"; read
+                ;;
+            2)
+                resetear_ssl_completo
+                echo -ne " ${W}► Enter para continuar...   ${N}"; read
+                ;;
+            3)
+                resetear_v2ray_completo
+                echo -ne " ${W}► Enter para continuar...   ${N}"; read
+                ;;
+            4)
+                resetear_python_completo
+                echo -ne " ${W}► Enter para continuar...   ${N}"; read
+                ;;
+            5)
+                resetear_ssr_completo
+                echo -ne " ${W}► Enter para continuar...   ${N}"; read
+                ;;
+            6)
+                resetear_hcr_completo
+                echo -ne " ${W}► Enter para continuar...   ${N}"; read
+                ;;
+            7)
+                echo -e "\n ${R}⚠️ Ejecutando limpieza profunda de TODOS los puertos fantasmas...   ${N}"
+                resetear_ssl_completo
+                resetear_v2ray_completo
+                resetear_python_completo
+                resetear_ssr_completo
+                resetear_hcr_completo
+                for p_comun in 80 443 444 445 8080 8880 8443; do
+                    fuser -k -9 "${p_comun}/tcp" >/dev/null 2>&1
+                    lsof -ti :"$p_comun" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
+                done
+                systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1
+                echo -e "\n ${V}¡LIMPIEZA TOTAL COMPLETADA! Todos los puertos están como nuevos.   ${N}"
+                echo -ne " ${W}► Enter para continuar...   ${N}"; read
+                ;;
+            0) break ;;
+            *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
+        esac
+    done
+}
+
+menu_zona_horaria() {
+    while true; do
+        clear
+        ZONA_ACTUAL=$(timedatectl 2>/dev/null | grep "Time zone" | awk '{print $3}')
+        HORA_ACTUAL=$(date +'%d/%m/%Y - %I:%M:%S %p')
+        echo -e "${C}================================================${N}"
+        echo -e "       ${A}🕒 CONFIGURADOR DE ZONA HORARIA 🕒   ${N}"
+        echo -e "${C}================================================${N}"
+        echo -e " ${W}🔹 Zona Actual :${N} ${V}$ZONA_ACTUAL   ${N}"
+        echo -e " ${W}🔹 Hora Exacta :${N} ${A}$HORA_ACTUAL   ${N}"
+        echo -e "${C}────────────────────────────────────────────────────────${N}"
+        echo -e " ${V}[1]${N} ${W}🇨🇴 Hora de Colombia / Perú / Ecuador (America/Bogota)   ${N}"
+        echo -e " ${V}[2]${N} ${W}🇲🇽 Hora de México CDMX (America/Mexico_City)   ${N}"
+        echo -e " ${V}[3]${N} ${W}🇻🇪 Hora de Venezuela / Bolivia (America/Caracas)   ${N}"
+        echo -e " ${V}[4]${N} ${W}🇦🇷 Hora de Argentina / Chile (America/Argentina/Buenos_Aires)   ${N}"
+        echo -e " ${V}[5]${N} ${W}🇺🇸 Hora de Miami / New York (America/New_York)   ${N}"
+        echo -e " ${V}[6]${N} ${W}✍️  Escribir otra Zona Horaria manualmente   ${N}"
+        echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
+        echo -e "${C}================================================${N}"
+        echo -ne " ${W}► Opcion :   ${N}"; read op_tz
+        case $op_tz in
+            1) TZ_SEL="America/Bogota" ;;
+            2) TZ_SEL="America/Mexico_City" ;;
+            3) TZ_SEL="America/Caracas" ;;
+            4) TZ_SEL="America/Argentina/Buenos_Aires" ;;
+            5) TZ_SEL="America/New_York" ;;
+            6) echo -ne " ${W}► Escribe tu Zona (Ej: America/Bogota):   ${N}"; read TZ_SEL ;;
+            0) break ;;
+            *) continue ;;
+        esac
+        if [ -n "$TZ_SEL" ] && [ -f "/usr/share/zoneinfo/$TZ_SEL" ]; then
+            echo "$TZ_SEL" > /etc/zeroday_tz.conf
+            timedatectl set-timezone "$TZ_SEL" >/dev/null 2>&1
+            ln -sf "/usr/share/zoneinfo/$TZ_SEL" /etc/localtime >/dev/null 2>&1
+            timedatectl set-ntp true >/dev/null 2>&1
+            echo -e "\n ${V}¡Hora sincronizada con éxito!: $(date +'%d/%m/%Y - %I:%M:%S %p')   ${N}"
+        else
+            echo -e "\n ${R}Zona horaria no encontrada.   ${N}"
+        fi
+        echo -ne " ${W}► Enter para continuar...   ${N}"; read
+    done
+}
+
 IP_VPS=$(hostname -I | awk '{print $1}'); [ -z "$IP_VPS" ] && IP_VPS="Desconocida"
 es() { systemctl is-active --quiet $1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 ep() { ss -tlnp | grep -q ":$1 " > /dev/null 2>&1 || ss -ulnp | grep -q ":$1 " > /dev/null 2>&1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
@@ -23,7 +305,7 @@ PORCENT_RAM=$(( (MEM_USADA * 100) / MEM_TOTAL ))
 S_OS=$(grep -oP '(?<=PRETTY_NAME=")[^"]+' /etc/os-release 2>/dev/null || echo "Ubuntu Linux")
 S_ARCH=$(uname -m)
 S_CPU=$(nproc)
-FECHA_ACT=$(date +'%d/%m/%Y-%H:%M')
+FECHA_ACT=$(date +'%d/%m/%Y - %I:%M %p')
 STR_PORTS=""
 C_PORT=0
 agregar_puerto() {
@@ -46,7 +328,7 @@ agregar_puerto() {
 ss -tlnp | grep -q ":22 " && agregar_puerto "🔹 SSH: ${V}22${N}"
 
 # V2RAY Dinámico
-if [ -f /usr/local/etc/xray/puerto.txt ]; then
+if [ -f /usr/local/etc/xray/puerto.txt ] && systemctl is-active --quiet xray; then
     PT_V2=$(cat /usr/local/etc/xray/puerto.txt)
     if ss -tlnp | grep -q ":$PT_V2 "; then
         agregar_puerto "🔹 V2RAY: ${V}$PT_V2${N}"
@@ -54,7 +336,7 @@ if [ -f /usr/local/etc/xray/puerto.txt ]; then
 fi
 
 # SHADOWSOCKS-R Dinámico
-if [ -f /etc/ssr/puerto.txt ]; then
+if [ -f /etc/ssr/puerto.txt ] && systemctl is-active --quiet ssr-server; then
     PT_SSR=$(cat /etc/ssr/puerto.txt)
     if ss -tlnp | grep -q ":$PT_SSR "; then
         agregar_puerto "🔹 SSR: ${V}$PT_SSR${N}"
@@ -62,7 +344,7 @@ if [ -f /etc/ssr/puerto.txt ]; then
 fi
 
 # PROXY PYTHON Dinámico
-if [ -f /etc/proxy.py ]; then
+if [ -f /etc/proxy.py ] && systemctl is-active --quiet proxypy; then
     PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )')
     if [ -n "$PT_PY" ] && ss -tlnp | grep -q ":$PT_PY "; then
          agregar_puerto "🔹 PROXY: ${V}$PT_PY${N}"
@@ -70,7 +352,7 @@ if [ -f /etc/proxy.py ]; then
 fi
 
 # SSL STUNNEL Dinámico
-if [ -f /etc/stunnel/stunnel.conf ]; then
+if [ -f /etc/stunnel/stunnel.conf ] && systemctl is-active --quiet stunnel4; then
     for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $2}' | tr -d ' '); do
         if ss -tlnp | grep -q ":$p_ssl "; then
             agregar_puerto "🔹 SSL: ${V}$p_ssl${N}"
@@ -241,7 +523,7 @@ echo -e " ${R}  usuario si supera el límite de $l conexiones.   ${N}"
 echo -e "${C}================================================${N}"
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
-2) echo -ne " ${W}Usuario a eliminar:   ${N}"; read u; userdel -r "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"; read -p " Enter..." ;;
+2) echo -ne " ${W}Usuario a eliminar:   ${N}"; read u; pkill -u "$u" 2>/dev/null; userdel -r -f "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"; read -p " Enter..." ;;
 3) awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd; read -p " Enter..." ;;
 4) ver_usuarios_online ;;
 0) break ;;
@@ -260,6 +542,7 @@ echo -e " ${V}[2]${N} ${W}➕ Adicionar Puerto Extra al SSL   ${N}"
 echo -e " ${R}[3]${N} ${W}➖ Eliminar un Puerto SSL   ${N}"
 echo -e " ${A}[4]${N} ${W}⏸️  Detener SSL   ${N}"
 echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Todo   ${N}"
+echo -e " ${A}[6]${N} ${W}🧹 Resetear / Limpiar Puertos Fantasmas SSL   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
 echo -e "${C}----------------------------------------${N}"
 echo -ne " ${W}► Opcion :   ${N}"; read op_ssl
@@ -267,13 +550,44 @@ case $op_ssl in
 1)
 p1=22
 echo -ne " ${W}► Puerto externo SSL a elegir (Ej: 443, 444):   ${N}"; read p2; p2=${p2:-443}
-apt-get install stunnel4 openssl -y >/dev/null 2>&1
+echo -e " ${A}⏳ Limpiando posibles puertos fantasmas en $p2 y preparando Stunnel4...   ${N}"
+apt-get install stunnel4 openssl psmisc lsof -y >/dev/null 2>&1
+systemctl stop stunnel4 >/dev/null 2>&1
+pkill -9 stunnel4 >/dev/null 2>&1
+liberar_puerto_fantasma "$p2" "ssl"
+
+mkdir -p /etc/stunnel /var/run/stunnel4
+chown -R stunnel4:stunnel4 /var/run/stunnel4 2>/dev/null || chmod 777 /var/run/stunnel4 2>/dev/null
+rm -f /var/run/stunnel4.pid /var/run/stunnel4/stunnel.pid
+
 openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=ZeroDay/O=VPN/C=CO" >/dev/null 2>&1
-echo -e "pid = /var/run/stunnel4.pid\ncert = /etc/stunnel/stunnel.pem\nclient = no\nsocket = a:SO_REUSEADDR=1\nsocket = l:TCP_NODELAY=1\nsocket = r:TCP_NODELAY=1\n[stunnel-custom]\naccept = $p2\nconnect = 127.0.0.1:$p1" > /etc/stunnel/stunnel.conf
+chmod 600 /etc/stunnel/stunnel.pem
+
+cat <<EOF > /etc/stunnel/stunnel.conf
+pid = /var/run/stunnel4/stunnel.pid
+cert = /etc/stunnel/stunnel.pem
+client = no
+socket = a:SO_REUSEADDR=1
+socket = l:TCP_NODELAY=1
+socket = r:TCP_NODELAY=1
+
+[stunnel-custom-$p2]
+accept = $p2
+connect = 127.0.0.1:$p1
+EOF
+
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
 ufw allow $p2/tcp >/dev/null 2>&1
+systemctl daemon-reload
+systemctl enable stunnel4 >/dev/null 2>&1
 systemctl restart stunnel4
-echo -e " ${V}¡SSL instalado y activo en puerto externo $p2!   ${N}"
+sleep 1
+
+if systemctl is-active --quiet stunnel4; then
+    echo -e " ${V}¡SSL instalado y activo en puerto externo $p2!   ${N}"
+else
+    echo -e " ${R}ERROR: Stunnel4 no pudo iniciar en el puerto $p2. Usa la Opción 6 para resetear.   ${N}"
+fi
 read -p " Enter..." ;;
 2)
 if [ ! -f /etc/stunnel/stunnel.conf ]; then
@@ -287,10 +601,31 @@ echo -ne " ${W}► NUEVO Puerto SSL a escuchar (Ej: 444, 445):   ${N}"; read p_e
 if [ -z "$p_ext" ]; then
     echo -e " ${R}Cancelado.  ${N}"; read -p " Enter..."; continue
 fi
+systemctl stop stunnel4 >/dev/null 2>&1
+pkill -9 stunnel4 >/dev/null 2>&1
+# Eliminar si ya estaba repetido dentro de stunnel.conf
+awk -v p="$p_ext" '
+BEGIN { RS=""; FS="\n" }
+{
+    keep=1
+    for(i=1; i<=NF; i++) {
+        if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0
+    }
+    if (keep) print $0 "\n"
+}' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
+mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
+
+liberar_puerto_fantasma "$p_ext" "ssl"
+
 echo -e "\n[stunnel-extra-$p_ext]\naccept = $p_ext\nconnect = 127.0.0.1:$p_int" >> /etc/stunnel/stunnel.conf
 ufw allow $p_ext/tcp >/dev/null 2>&1
 systemctl restart stunnel4
-echo -e "\n ${V}¡Puerto SSL $p_ext adicionado exitosamente y redirigiendo al $p_int!   ${N}"
+sleep 1
+if systemctl is-active --quiet stunnel4; then
+    echo -e "\n ${V}¡Puerto SSL $p_ext adicionado exitosamente y redirigiendo al $p_int!   ${N}"
+else
+    echo -e "\n ${R}Error al levantar el puerto $p_ext. Verifica que no esté ocupado.   ${N}"
+fi
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
 3)
@@ -316,21 +651,36 @@ if [ -z "$p_del" ]; then
     echo -e " ${R}Cancelado.  ${N}"; read -p " Enter..."; continue
 fi
 
-if grep -q "accept = $p_del" /etc/stunnel/stunnel.conf; then
-    BLOQUE=$(grep -B 1 "accept = $p_del" /etc/stunnel/stunnel.conf | grep '\[' | head -n 1)
-    BLOQUE_ESC=$(echo "$BLOQUE" | sed 's/\[/\\[/g; s/\]/\\]/g')
-    sed -i "/^$BLOQUE_ESC$/,/^connect =/d" /etc/stunnel/stunnel.conf
-    
+if grep -qE "^accept[[:space:]]*=[[:space:]]*$p_del$" /etc/stunnel/stunnel.conf; then
+    systemctl stop stunnel4 >/dev/null 2>&1
+    pkill -9 stunnel4 >/dev/null 2>&1
+    awk -v p="$p_del" '
+    BEGIN { RS=""; FS="\n" }
+    {
+        keep=1
+        for(i=1; i<=NF; i++) {
+            if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0
+        }
+        if (keep) print $0 "\n"
+    }' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
+    mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
+
+    fuser -k -9 "${p_del}/tcp" >/dev/null 2>&1
+    lsof -ti :"$p_del" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
     ufw delete allow $p_del/tcp >/dev/null 2>&1
-    systemctl restart stunnel4
-    echo -e "\n ${V}¡Puerto SSL $p_del eliminado exitosamente!   ${N}"
+
+    if grep -q '^accept' /etc/stunnel/stunnel.conf 2>/dev/null; then
+        systemctl start stunnel4 >/dev/null 2>&1
+    fi
+    echo -e "\n ${V}¡Puerto SSL $p_del eliminado de raíz y liberado de la memoria!   ${N}"
 else
     echo -e "\n ${R}El puerto $p_del no existe en la configuración.   ${N}"
 fi
 echo -ne " ${W}► Enter para continuar...   ${N}"; read
 ;;
-4) systemctl stop stunnel4; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-5) systemctl stop stunnel4; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+4) systemctl stop stunnel4 >/dev/null 2>&1; pkill -9 stunnel4 >/dev/null 2>&1; echo -e " ${A}Detenido y puertos liberados.   ${N}"; read -p " Enter..." ;;
+5) resetear_ssl_completo; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+6) resetear_ssl_completo; read -p " Enter..." ;;
 0) break ;;
 *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1 ;;
 esac
@@ -478,6 +828,8 @@ configurar_cuenta_ssr() {
         ssr_obfs_param=""
     fi
 
+    liberar_puerto_fantasma "$ssr_port" "ssr"
+
     mkdir -p /etc/ssr
     cat <<EOF > /etc/ssr/config.json
 {
@@ -558,8 +910,7 @@ WantedBy=multi-user.target
 EOF
 
     PT_NOW=$(cat /etc/ssr/puerto.txt)
-    fuser -k -9 "$PT_NOW"/tcp >/dev/null 2>&1
-    lsof -ti tcp:"$PT_NOW" | xargs kill -9 2>/dev/null
+    liberar_puerto_fantasma "$PT_NOW" "ssr"
 
     systemctl daemon-reload
     systemctl enable ssr-server >/dev/null 2>&1
@@ -605,6 +956,10 @@ while true; do
                 echo -e "\n ${R}[!] Primero instala ShadowsocksR con la Opción 1.   ${N}"
                 sleep 2
             else
+                if [ -f /etc/ssr/puerto.txt ]; then
+                    OLD_SSR_PT=$(cat /etc/ssr/puerto.txt)
+                    fuser -k -9 "${OLD_SSR_PT}/tcp" >/dev/null 2>&1
+                fi
                 configurar_cuenta_ssr
                 systemctl restart ssr-server
                 echo -e "\n ${V}¡Configuración actualizada y reiniciada!   ${N}"
@@ -632,7 +987,7 @@ while true; do
         7)
             echo -ne "\n ${W}► ¿Seguro que deseas eliminar ShadowsocksR? (s/n):   ${N}"; read conf_del
             if [[ "$conf_del" == "s" || "$conf_del" == "S" ]]; then
-                systemctl stop ssr-server 2>/dev/null
+                resetear_ssr_completo
                 systemctl disable ssr-server 2>/dev/null
                 rm -rf /usr/local/shadowsocksr /etc/ssr /etc/systemd/system/ssr-server.service
                 systemctl daemon-reload
@@ -654,16 +1009,16 @@ echo -e " ${W}Estado:${N} $(es proxypy)"
 echo -e "${C}----------------------------------------${N}"
 echo -e " ${V}[3]${N} ${W}🟢 WebSocket PRO (Elegir Puerto)   ${N}"
 echo -e " ${A}[4]${N} ${W}⏸️  Detener Proxy   ${N}"
-echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar   ${N}"
+echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar / Resetear Puerto Python   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
 echo -e "${C}----------------------------------------${N}"
 echo -ne " ${W}► Opcion :   ${N}"; read op_py
 case $op_py in
 3)
 echo -ne " ${W}► Puerto para el WebSocket (Ej: 80):   ${N}"; read pt; pt=${pt:-80}
-echo -e " ${A}Liberando el puerto $pt y preparando Python...   ${N}"
-systemctl stop apache2 nginx dropbear 2>/dev/null
-fuser -k $pt/tcp 2>/dev/null
+echo -e " ${A}Liberando el puerto $pt de rastros fantasmas y preparando Python...   ${N}"
+systemctl stop apache2 nginx dropbear proxypy 2>/dev/null
+liberar_puerto_fantasma "$pt" "python"
 apt-get install python3 -y >/dev/null 2>&1
 cat << 'EOF_PY' > /etc/proxy.py
 import socket, threading
@@ -697,8 +1052,8 @@ systemctl daemon-reload; systemctl enable proxypy >/dev/null 2>&1; systemctl res
 ufw allow $pt/tcp >/dev/null 2>&1
 echo -e " ${V}¡WebSocket PRO Activo en el puerto $pt!   ${N}"
 read -p " Enter..." ;;
-4) systemctl stop proxypy; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-5) systemctl stop proxypy; rm -f /etc/proxy.py /etc/systemd/system/proxypy.service; systemctl daemon-reload; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+4) systemctl stop proxypy >/dev/null 2>&1; pkill -9 -f "/etc/proxy.py" >/dev/null 2>&1; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
+5) resetear_python_completo; read -p " Enter..." ;;
 0) break ;;
 esac
 done
@@ -853,7 +1208,7 @@ echo -e " ${V}[1]${N} ${W}🟢 Instalar V2Ray/Xray (Modo WebSocket)   ${N}"
 echo -e " ${A}[2]${N} ${W}➕ Generar Nuevo Usuario (UUID)   ${N}"
 echo -e " ${C}[3]${N} ${W}⚙️  Modificar Puerto de Conexión   ${N}"
 echo -e " ${V}[4]${N} ${W}👁️  Ver mis Datos y Link de Conexión   ${N}"
-echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Todo   ${N}"
+echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar / Resetear Todo V2Ray   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver al Menú Principal   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -ne " ${W}► Opcion :   ${N}"; read op_v2
@@ -870,10 +1225,9 @@ case $op_v2 in
     echo -ne " ${W}► Tu Dominio del Servidor (Ej: movistar.zex.digital):   ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
     UUID=$(uuidgen)
     
-    systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
-    fuser -k -9 $pt_v2/tcp >/dev/null 2>&1
-    lsof -ti tcp:$pt_v2 | xargs kill -9 2>/dev/null
-    sleep 2
+    systemctl stop xray apache2 nginx dropbear 2>/dev/null
+    liberar_puerto_fantasma "$pt_v2" "v2ray"
+    sleep 1
     
     mkdir -p /usr/local/etc/xray
     openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=$dom_v2" >/dev/null 2>&1
@@ -944,9 +1298,9 @@ EOF
         echo -e " ${R}Cancelado.   ${N}"; read -p " Enter..."; continue
     fi
     
-    systemctl stop proxypy stunnel4 apache2 nginx dropbear hcr-server 2>/dev/null
-    fuser -k -9 $pt_nuevo/tcp >/dev/null 2>&1
-    lsof -ti tcp:$pt_nuevo | xargs kill -9 2>/dev/null
+    systemctl stop xray 2>/dev/null
+    fuser -k -9 "${pt_actual}/tcp" >/dev/null 2>&1
+    liberar_puerto_fantasma "$pt_nuevo" "v2ray"
     
     sed -i -E "s/\"port\": [0-9]+/\"port\": $pt_nuevo/" /usr/local/etc/xray/config.json
     echo "$pt_nuevo" > /usr/local/etc/xray/puerto.txt
@@ -1002,11 +1356,11 @@ EOF
     echo -e " ${A}$VMESS_LINK   ${N}\n"
     echo -ne " ${W}► Enter para continuar...   ${N}"; read ;;
 5)
-    systemctl stop xray >/dev/null 2>&1
+    resetear_v2ray_completo
     systemctl disable xray >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove >/dev/null 2>&1
     rm -rf /usr/local/etc/xray
-    echo -e " ${R}V2Ray / Xray Desinstalado completamente.   ${N}"
+    echo -e " ${R}V2Ray / Xray Desinstalado y puertos liberados completamente.   ${N}"
     echo -ne " ${W}► Enter para continuar...   ${N}"; read ;;
 0) break ;;
 esac
@@ -1046,10 +1400,8 @@ while true; do
             instalar_hcr
             ;;
         6)
-            systemctl stop hcr-server 2>/dev/null
+            resetear_hcr_completo
             systemctl disable hcr-server 2>/dev/null
-            rm -rf /etc/hcr /etc/systemd/system/hcr-server.service
-            systemctl daemon-reload
             echo -e " ${R}HCR Desinstalado y Limpiado.   ${N}"; sleep 1
             ;;
         7)
@@ -1132,7 +1484,7 @@ source /etc/hcr/config
 cd /etc/hcr
 
 if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -listen :$P_INJ -transport tls -tls-cert /etc/hcr/cert.pem -tls-key /etc/hcr/key.pem || ./hcr-server -port $P_INJ -transport tls -tls-cert /etc/hcr/cert.pem -tls-key /etc/hcr/key.pem
+    ./hcr-server -listen :$P_INJ -transport tls -tls-cert /etc/hcr/hcr.crt -tls-key /etc/hcr/hcr.key || ./hcr-server -port $P_INJ -transport tls -tls-cert /etc/hcr/hcr.crt -tls-key /etc/hcr/hcr.key
 else
     ./hcr-server -listen :$P_INJ -transport plain || ./hcr-server -port $P_INJ -transport plain
 fi
@@ -1141,8 +1493,7 @@ EOF
 
     echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
     
-    fuser -k -9 $p_inj/tcp >/dev/null 2>&1
-    lsof -ti tcp:$p_inj | xargs kill -9 2>/dev/null
+    liberar_puerto_fantasma "$p_inj" "hcr"
     
     systemctl daemon-reload
     systemctl enable hcr-server >/dev/null 2>&1
@@ -1211,6 +1562,7 @@ while true; do
                 echo -e "\n ${R}Deteniendo y eliminando servicios...   ${N}"
                 systemctl stop slowdns > /dev/null 2>&1
                 systemctl disable slowdns > /dev/null 2>&1
+                fuser -k -9 5300/udp >/dev/null 2>&1
                 rm -f /etc/systemd/system/slowdns.service
                 systemctl daemon-reload
                 iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 > /dev/null 2>&1
@@ -1542,7 +1894,7 @@ echo -e " ${C}[6]${N} ${W}SQUID         ${R}[OFF]${N}   ${C}[16]${N} ${W}SSLH MU
 echo -e " ${C}[7]${N} ${W}PROXY PYTHON  ${N}$PPY    ${C}[17]${N} ${W}OVER WEBSOCKET ${A}(#BETA)  ${N}"
 echo -e " ${C}[8]${N} ${W}V2RAY MANAGER ${N}$PV2    ${C}[18]${N} ${W}SOCKS5         ${A}(#BETA)  ${N}"
 echo -e " ${C}[9]${N} ${W}CFA ( CLASH ) ${R}[OFF]${N}   ${C}[19]${N} ${W}Protocolos UDP ${N}$PUDP  "
-echo -e " ${C}[10]${N} ${W}TROJAN-GO     ${R}[OFF]${N}   ${C}[20]${N} ${M}FUNCIONES EN DISEÑO!  ${N}"
+echo -e " ${C}[10]${N} ${W}TROJAN-GO     ${R}[OFF]${N}   ${C}[20]${N} ${A}🧹 LIMPIADOR PUERTOS  ${N}"
 echo -e " "
 echo -e "${A}🍄 INSTALACION DE HERRAMIENTAS Y SERVICIOS 🍄   ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
@@ -1550,7 +1902,7 @@ echo -e " ${C}[21]${N} ${W}BLOCK TORRENT        ${C}[22]${N} ${W}BadVPN         
 echo -e " ${C}[23]${N} ${W}TCP (BBR|Plus) ${R}[OFF]${N} ${C}[24]${N} ${W}FAILBAN        ${N}$PFB  "
 echo -e " ${C}[25]${N} ${W}ARCHIVO ONLINE ${V}[81]${N}  ${C}[26]${N} ${W}UP|DOWN SpeedTest  ${N}"
 echo -e " ${C}[27]${N} ${W}DETALLES DEL VPS     ${C}[28]${N} ${W}BLOCK ADS      ${R}[OFF]  ${N}"
-echo -e " ${C}[29]${N} ${W}DNS CUSTOM (NETFLIX) ${C}[30]${N} ${W}HERRAMIENTAS EXTRAS  ${N}"
+echo -e " ${C}[29]${N} ${W}DNS CUSTOM (NETFLIX) ${C}[30]${N} ${W}ZONA HORARIA (RELOJ)  ${N}"
 echo -e " ${C}[31]${N} ${W}REINICIAR SERVICIOS  ${C}[32]${N} ${W}Brook Server   ${R}[OFF]  ${N}"
 echo -e " ${C}[33]${N} ${W}FIREWALL (IPTABLES)  ${C}[34]${N} ${W}Enable/Change PASSWD ROOT  ${N}"
 echo -e " ${C}[35]${N} ${W}AToken [APP's] ${R}[OFF]${N} ${C}[36]${N} ${W}BHTTP [APP's]  ${R}[OFF]  ${N}"
@@ -1564,11 +1916,13 @@ case $op_inst in
 8) menu_v2ray ;;
 14) menu_slowdns ;;
 19) menu_udp ;;
+20) menu_limpiador_puertos ;;
 21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo " Bloqueado   "; read -p " Enter..." ;;
 22) menu_badvpn ;;
 24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo " Listo   "; read -p " Enter..." ;;
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p " Enter..." ;;
 27) info_sistema; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
+30) menu_zona_horaria ;;
 31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
 33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; read -p " Enter..." ;;
 34) passwd root; read -p " Enter..." ;;
@@ -1589,17 +1943,20 @@ echo -e " ${V}[04]${N} ${W}⇨ AUTOINICIAR SCRIPT     [  ${N}${R}OFF${N}${W}]   
 echo -e " ${V}[05]${N} ${W}⇨ INSTALADOR DE PROTOCOLOS   ${N}"
 echo -e " ${V}[06]${N} ${W}⇨ 📝 CONFIGURAR BANNER (MENSAJE)   ${N}"
 echo -e " ${V}[07]${N} ${W}⇨ 🎨 CAMBIAR COLORES DEL MENU   ${N}"
+echo -e " ${A}[09]${N} ${W}⇨ 🧹 LIMPIADOR DE PUERTOS FANTASMAS (RESET)   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${V}[08]${N} ${W}⇨ [!] UPDATE / REMOVE   |  ${V}[0]${N} ${W}⇨ [ SALIR ]   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -ne " ${W}► Opcion :   ${N}"; read opcion
 case $opcion in
-1) menu_usuarios ;;
-2) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
-3|4|5|8) menu_protocolos ;;
-6) configurar_banner ;;
-7) configurar_colores ;;
-0) exit 0 ;;
+1|01) menu_usuarios ;;
+2|02) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
+3|03) ver_usuarios_online ;;
+4|04|5|05|8|08) menu_protocolos ;;
+6|06) configurar_banner ;;
+7|07) configurar_colores ;;
+9|09) menu_limpiador_puertos ;;
+0|00) exit 0 ;;
 *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
 esac
 done
