@@ -29,6 +29,28 @@ sincronizar_hora_celular() {
 sincronizar_hora_celular
 
 # ==========================================
+# BLINDAJE AUTOMÁTICO DE ESTABILIDAD SSHD Y RED (UBUNTU / DEBIAN)
+# ==========================================
+optimizar_sshd_estabilidad() {
+    if [ -f /etc/ssh/sshd_config ] && ! grep -q "^MaxStartups 100:30:200" /etc/ssh/sshd_config 2>/dev/null; then
+        sed -i '/^ClientAliveInterval/d;/^ClientAliveCountMax/d;/^TCPKeepAlive/d;/^MaxStartups/d;/^MaxSessions/d;/^UseDNS/d' /etc/ssh/sshd_config
+        cat << 'EOF_SSH' >> /etc/ssh/sshd_config
+TCPKeepAlive yes
+ClientAliveInterval 15
+ClientAliveCountMax 6
+MaxStartups 100:30:200
+MaxSessions 100
+UseDNS no
+EOF_SSH
+        systemctl reload ssh >/dev/null 2>&1 || systemctl reload sshd >/dev/null 2>&1 || systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1
+    fi
+    sysctl -w net.ipv4.tcp_keepalive_time=60 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_keepalive_intvl=10 >/dev/null 2>&1
+    sysctl -w net.ipv4.tcp_keepalive_probes=6 >/dev/null 2>&1
+}
+optimizar_sshd_estabilidad
+
+# ==========================================
 # MOTOR ANTI-PUERTOS FANTASMAS Y RESETEADOR PROFUNDO
 # ==========================================
 liberar_puerto_fantasma() {
@@ -296,7 +318,8 @@ menu_zona_horaria() {
     done
 }
 
-IP_VPS=$(hostname -I | awk '{print $1}'); [ -z "$IP_VPS" ] && IP_VPS="Desconocida"
+IP_VPS=$(hostname -I 2>/dev/null | awk '{print $1}')
+[ -z "$IP_VPS" ] && IP_VPS=$(curl -4 -s --connect-timeout 3 ifconfig.me 2>/dev/null || echo "Desconocida")
 es() { systemctl is-active --quiet $1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 ep() { ss -tlnp | grep -qE ":$1\b" > /dev/null 2>&1 || ss -ulnp | grep -qE ":$1\b" > /dev/null 2>&1 && echo -e "${V}[ON] ${N}" || echo -e "${R}[OFF]${N}"; }
 
@@ -305,7 +328,7 @@ MEM_TOTAL=$(free -m | awk '/Mem:/ {print $2}')
 MEM_USADA=$(free -m | awk '/Mem:/ {print $3}')
 LIBRE_RAM=$(free -m | awk '/Mem:/ {print $4}')
 PORCENT_RAM=$(( (MEM_USADA * 100) / MEM_TOTAL ))
-S_OS=$(grep -oP '(?<=PRETTY_NAME=")[^"]+' /etc/os-release 2>/dev/null || echo "Ubuntu Linux")
+S_OS=$(grep -oP '(?<=PRETTY_NAME=")[^"]+' /etc/os-release 2>/dev/null || echo "Linux VPS")
 S_ARCH=$(uname -m)
 S_CPU=$(nproc)
 FECHA_ACT=$(date +'%d/%m/%Y - %I:%M %p')
@@ -412,12 +435,12 @@ ver_usuarios_online() {
     else
         for user in $USERS; do
             if [ -f "/etc/vps_limites/$user" ]; then
-                limite=$(cat /etc/vps_limites/$user)
+                limite=$(cat /etc/vps_limites/$user | tr -d ' \n\r')
             else
                 limite="?"
             fi
             
-            conex=$(ps -u "$user" 2>/dev/null | grep -c sshd)
+            conex=$(ps -u "$user" -o comm= 2>/dev/null | grep -c "^sshd$")
             
             if [ "$conex" -gt 0 ]; then
                 INFO_CON=$(who | grep "^$user " | head -n 1)
@@ -426,11 +449,11 @@ ver_usuarios_online() {
                     IP_CLI=$(echo "$INFO_CON" | awk '{print $5}' | tr -d '()')
                 else
                     HORA="Activo"
-                    IP_CLI="Oculta"
+                    IP_CLI="Túnel/VPN"
                 fi
                 echo -e " 👤  ${W}$user  ${N}-> ${V}[ ONLINE ]  ${N}${W}(Conex: $conex/$limite | Desde: $HORA | IP: $IP_CLI)   ${N}"
             else
-                ULTIMA=$(last -n 1 "$user" | head -n 1)
+                ULTIMA=$(last -n 1 "$user" 2>/dev/null | head -n 1)
                 if [[ "$ULTIMA" == *"wtmp begins"* ]] || [[ -z "$ULTIMA" ]]; then
                     echo -e " 👤  ${W}$user  ${N}-> ${R}[ OFFLINE ]  ${N}${W}(Límite: $limite | Nunca se ha conectado)   ${N}"
                 else
@@ -465,27 +488,29 @@ echo -e "       ${A}⚜️  CREADOR DE CUENTAS TIPO ⚜️   ${N}"
 echo -e "${C}================================================${N}"
 echo -ne " ${W}👤 Nombre de usuario:   ${N}"; read u
 echo -ne " ${W}🔑 Contraseña:   ${N}"; read p
-echo -ne " ${W}⏳ Dias de duración:   ${N}"; read d
-echo -ne " ${W}📈 Límite de conexiones:   ${N}"; read l
+echo -ne " ${W}⏳ Dias de duración:   ${N}"; read d; d=${d:-30}
+echo -ne " ${W}📈 Límite de conexiones:   ${N}"; read l; l=${l:-1}
+optimizar_sshd_estabilidad
 useradd -m -s /bin/bash "$u" 2>/dev/null
 echo "$u:$p" | chpasswd 2>/dev/null
 chage -E $(date -d "+$d days" +%Y-%m-%d) "$u" 2>/dev/null || true
 mkdir -p /etc/vps_limites
 echo "$l" > "/etc/vps_limites/$u"
-if [ ! -f /usr/local/bin/monitor_limites.sh ]; then
+
 cat << 'EOF_MONITOR' > /usr/local/bin/monitor_limites.sh
 #!/bin/bash
 for user in $(ls /etc/vps_limites/ 2>/dev/null); do
-limite=$(cat /etc/vps_limites/$user)
-conex=$(ps -u $user 2>/dev/null | grep -c sshd)
-if [ "$conex" -gt "$limite" ]; then
-pkill -u $user sshd
-fi
+    limite=$(cat /etc/vps_limites/$user 2>/dev/null | tr -d ' \n\r')
+    [[ ! "$limite" =~ ^[0-9]+$ ]] && continue
+    conex=$(ps -u "$user" -o comm= 2>/dev/null | grep -c "^sshd$")
+    if [ "$conex" -gt "$limite" ]; then
+        pkill -u "$user" sshd
+    fi
 done
 EOF_MONITOR
 chmod +x /usr/local/bin/monitor_limites.sh
-(crontab -l 2>/dev/null | grep -v "monitor_limites.sh"; echo "* * * * * /usr/local/bin/monitor_limites.sh") | crontab -
-fi
+(crontab -l 2>/dev/null | grep -v "monitor_limites.sh"; echo "* * * * * /usr/local/bin/monitor_limites.sh") | crontab - 2>/dev/null
+
 apt-get install figlet -y >/dev/null 2>&1
 clear
 echo -e "${C}================================================${N}"
@@ -554,7 +579,9 @@ case $op_ssl in
 p1=22
 echo -ne " ${W}► Puerto externo SSL a elegir (Ej: 443, 444):   ${N}"; read p2; p2=${p2:-443}
 echo -e " ${A}⏳ Limpiando posibles puertos fantasmas en $p2 y preparando Stunnel4...   ${N}"
+apt-get update -y >/dev/null 2>&1
 apt-get install stunnel4 openssl psmisc lsof -y >/dev/null 2>&1
+optimizar_sshd_estabilidad
 systemctl stop stunnel4 >/dev/null 2>&1
 pkill -9 stunnel4 >/dev/null 2>&1
 liberar_puerto_fantasma "$p2" "ssl"
@@ -570,6 +597,11 @@ client = no
 socket = a:SO_REUSEADDR=1
 socket = l:TCP_NODELAY=1
 socket = r:TCP_NODELAY=1
+socket = l:SO_KEEPALIVE=1
+socket = r:SO_KEEPALIVE=1
+TIMEOUTidle = 86400
+TIMEOUTclose = 0
+TIMEOUTconnect = 10
 
 [stunnel-custom-$p2]
 accept = $p2
@@ -586,12 +618,14 @@ Type=simple
 ExecStart=/usr/bin/stunnel4 /etc/stunnel/stunnel.conf
 Restart=always
 RestartSec=2
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
 EOF_S
 
 sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
+iptables -I INPUT -p tcp --dport $p2 -j ACCEPT >/dev/null 2>&1
 ufw allow $p2/tcp >/dev/null 2>&1
 systemctl daemon-reload
 systemctl enable stunnel4 >/dev/null 2>&1
@@ -599,7 +633,7 @@ systemctl restart stunnel4
 sleep 1
 
 if systemctl is-active --quiet stunnel4 && ss -tlnp | grep -qE ":${p2}\b"; then
-    echo -e " ${V}¡SSL instalado y activo al instante en puerto externo $p2!   ${N}"
+    echo -e " ${V}¡SSL instalado, blindado contra desconexiones y activo en puerto $p2!   ${N}"
 else
     echo -e " ${R}ERROR: Stunnel4 no pudo iniciar en el puerto $p2. Usa la Opción 6 para resetear.   ${N}"
 fi
@@ -618,7 +652,6 @@ if [ -z "$p_ext" ]; then
 fi
 systemctl stop stunnel4 >/dev/null 2>&1
 pkill -9 stunnel4 >/dev/null 2>&1
-# Eliminar si ya estaba repetido dentro de stunnel.conf
 awk -v p="$p_ext" '
 BEGIN { RS=""; FS="\n" }
 {
@@ -633,6 +666,7 @@ mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
 liberar_puerto_fantasma "$p_ext" "ssl"
 
 echo -e "\n[stunnel-extra-$p_ext]\naccept = $p_ext\nconnect = 127.0.0.1:$p_int" >> /etc/stunnel/stunnel.conf
+iptables -I INPUT -p tcp --dport $p_ext -j ACCEPT >/dev/null 2>&1
 ufw allow $p_ext/tcp >/dev/null 2>&1
 systemctl daemon-reload
 systemctl restart stunnel4
@@ -855,8 +889,8 @@ configurar_cuenta_ssr() {
     "local_address": "127.0.0.1",
     "local_port": 1080,
     "password": "$ssr_pass",
-    "timeout": 120,
-    "udp_timeout": 60,
+    "timeout": 300,
+    "udp_timeout": 120,
     "method": "$ssr_method",
     "protocol": "$ssr_proto_cfg",
     "protocol_param": "",
@@ -904,7 +938,7 @@ instalar_ssr() {
         return
     fi
 
-    echo -e " ${V}🔧 Aplicando parches de ingeniería para Ubuntu 24.04/26.04 (OpenSSL 3 & Python 3)...   ${N}"
+    echo -e " ${V}🔧 Aplicando parches de ingeniería para Debian/Ubuntu (OpenSSL 3 & Python 3)...   ${N}"
     find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/collections\.MutableMapping/collections.abc.MutableMapping/g' {} + 2>/dev/null
     find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/EVP_CIPHER_CTX_cleanup/EVP_CIPHER_CTX_reset/g' {} + 2>/dev/null
 
@@ -920,6 +954,7 @@ WorkingDirectory=/usr/local/shadowsocksr/shadowsocks
 ExecStart=/usr/bin/python3 /usr/local/shadowsocksr/shadowsocks/server.py -c /etc/ssr/config.json
 Restart=always
 RestartSec=3
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
@@ -1033,40 +1068,67 @@ case $op_py in
 3)
 echo -ne " ${W}► Puerto para el WebSocket (Ej: 80):   ${N}"; read pt; pt=${pt:-80}
 echo -e " ${A}Liberando el puerto $pt de rastros fantasmas y preparando Python...   ${N}"
+optimizar_sshd_estabilidad
 systemctl stop apache2 nginx dropbear proxypy 2>/dev/null
 liberar_puerto_fantasma "$pt" "python"
-apt-get install python3 -y >/dev/null 2>&1
+apt-get update -y >/dev/null 2>&1
+apt-get install python3 lsof psmisc -y >/dev/null 2>&1
 cat << 'EOF_PY' > /etc/proxy.py
 import socket, threading
-def c(s):
+
+def f(x, y):
     try:
-        s.recv(1024)
-        s.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-        d = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        d.connect(('127.0.0.1', 22))
-        def f(x, y):
-            try:
-                while True:
-                    a = x.recv(4096)
-                    if not a: break
-                    y.sendall(a)
-            except: pass
-        threading.Thread(target=f, args=(s, d)).start()
-        threading.Thread(target=f, args=(d, s)).start()
+        while True:
+            a = x.recv(8192)
+            if not a: break
+            y.sendall(a)
     except: pass
+    finally:
+        try: x.close()
+        except: pass
+        try: y.close()
+        except: pass
+
+def c(s):
+    d = None
+    try:
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        s.settimeout(15)
+        s.recv(4096)
+        s.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+        d = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        d.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        d.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        d.settimeout(15)
+        d.connect(('127.0.0.1', 22))
+        s.settimeout(None)
+        d.settimeout(None)
+        threading.Thread(target=f, args=(s, d), daemon=True).start()
+        threading.Thread(target=f, args=(d, s), daemon=True).start()
+    except:
+        try: s.close()
+        except: pass
+        if d:
+            try: d.close()
+            except: pass
+
 sv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 sv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 sv.bind(('0.0.0.0', PUERTO_AQUI))
-sv.listen(100)
+sv.listen(500)
 while True:
-    cl, a = sv.accept()
-    threading.Thread(target=c, args=(cl,)).start()
+    try:
+        cl, a = sv.accept()
+        threading.Thread(target=c, args=(cl,), daemon=True).start()
+    except: pass
 EOF_PY
 sed -i "s/PUERTO_AQUI/$pt/g" /etc/proxy.py
-echo -e "[Unit]\nDescription=Proxy Python WS\n[Service]\nExecStart=/usr/bin/python3 /etc/proxy.py\nRestart=always\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/proxypy.service
+echo -e "[Unit]\nDescription=Proxy Python WS\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/python3 /etc/proxy.py\nRestart=always\nRestartSec=2\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/proxypy.service
 systemctl daemon-reload; systemctl enable proxypy >/dev/null 2>&1; systemctl restart proxypy
+iptables -I INPUT -p tcp --dport $pt -j ACCEPT >/dev/null 2>&1
 ufw allow $pt/tcp >/dev/null 2>&1
-echo -e " ${V}¡WebSocket PRO Activo en el puerto $pt!   ${N}"
+echo -e " ${V}¡WebSocket PRO Activo y Blindado en el puerto $pt!   ${N}"
 read -p " Enter..." ;;
 4) systemctl stop proxypy >/dev/null 2>&1; pkill -9 -f "/etc/proxy.py" >/dev/null 2>&1; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
 5) resetear_python_completo; read -p " Enter..." ;;
@@ -1090,18 +1152,20 @@ echo -ne " ${W}► Opcion :   ${N}"; read op_udp
 case $op_udp in
 1)
 echo -e " ${W}Instalando servidor UDP Custom...   ${N}"
+apt-get update -y >/dev/null 2>&1
 apt-get install -y iptables curl >/dev/null 2>&1
 curl -sL -A "Mozilla/5.0" "https://raw.githubusercontent.com/Haris131/UDP-Custom/main/udp-custom-linux-amd64" -o /usr/bin/udp-custom
 chmod +x /usr/bin/udp-custom; mkdir -p /root/udp
 echo -e "{\n  \"listen\": \":36712\",\n  \"stream_buffer\": 33554432,\n  \"receive_buffer\": 8388608,\n  \"auth\": {\n    \"mode\": \"passwords\"\n  }\n}" > /root/udp/config.json
-echo -e "[Unit]\nDescription=UDP Custom\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443\nRestart=always\nRestartSec=2\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
+echo -e "[Unit]\nDescription=UDP Custom\nAfter=network.target\n[Service]\nUser=root\nType=simple\nWorkingDirectory=/root/udp\nExecStart=/usr/bin/udp-custom server -exclude 53,5300,443,7200,7300\nRestart=always\nRestartSec=2\nLimitNOFILE=65535\n[Install]\nWantedBy=default.target" > /etc/systemd/system/udp-custom.service
 systemctl daemon-reload; systemctl enable udp-custom >/dev/null 2>&1; systemctl restart udp-custom
 iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null
-iptables -t nat -A PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712
+iptables -t nat -A PREROUTING -p udp -m multiport ! --dports 53,5300,443,7200,7300 -j REDIRECT --to-ports 36712 2>/dev/null || iptables -t nat -A PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null
+ufw allow 36712/udp >/dev/null 2>&1
 echo -e " ${V}¡UDP Custom Instalado y Activo (Puerto 36712)!   ${N}"
 read -p " Enter..." ;;
 2) systemctl stop udp-custom; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-3) systemctl stop udp-custom; rm -rf /usr/bin/udp-custom /root/udp /etc/systemd/system/udp-custom.service; systemctl daemon-reload; iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+3) systemctl stop udp-custom; rm -rf /usr/bin/udp-custom /root/udp /etc/systemd/system/udp-custom.service; systemctl daemon-reload; iptables -t nat -D PREROUTING -p udp -m multiport ! --dports 53,5300,443,7200,7300 -j REDIRECT --to-ports 36712 2>/dev/null; iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
 0) break ;;
 esac
 done
@@ -1172,8 +1236,8 @@ fi
 if [ -x /usr/bin/badvpn-udpgw ]; then
     echo -e " ${V}Binario oficial instalado y purificado.   ${N}"
     
-    echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 10\nRestart=always\nRestartSec=3\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
-    echo -e "[Unit]\nDescription=BadVPN UDPGW 7200\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 1000 --max-connections-for-client 10\nRestart=always\nRestartSec=3\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7200.service
+    echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 100 --client-socket-sndbuf 0\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
+    echo -e "[Unit]\nDescription=BadVPN UDPGW 7200\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 1000 --max-connections-for-client 100 --client-socket-sndbuf 0\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7200.service
     
     systemctl daemon-reload
     systemctl enable badvpn7300 >/dev/null 2>&1
@@ -1238,7 +1302,7 @@ case $op_v2 in
     
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===   ${N}"
     echo -ne " ${W}► Puerto a usar (Recomendado: 443):   ${N}"; read pt_v2; pt_v2=${pt_v2:-443}
-    echo -ne " ${W}► Tu Dominio del Servidor (Ej: movistar.zex.digital):   ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
+    echo -ne " ${W}► Tu Dominio o SNI del Servidor (Ej: movistar.zex.digital):   ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
     UUID=$(uuidgen)
     
     systemctl stop xray apache2 nginx dropbear 2>/dev/null
@@ -1263,6 +1327,7 @@ case $op_v2 in
       "network": "ws",
       "security": "tls",
       "tlsSettings": {
+        "allowInsecure": true,
         "certificates": [
           {
             "certificateFile": "/usr/local/etc/xray/cert.crt",
@@ -1270,7 +1335,8 @@ case $op_v2 in
           }
         ]
       },
-      "wsSettings": { "path": "/zeroday" }
+      "wsSettings": { "path": "/zeroday" },
+      "sockopt": { "tcpKeepAliveInterval": 15, "tcpNoDelay": true }
     }
   }],
   "outbounds": [{ "protocol": "freedom", "settings": {} }]
@@ -1280,13 +1346,15 @@ EOF
     echo "$pt_v2" > /usr/local/etc/xray/puerto.txt
     echo "$UUID" > /usr/local/etc/xray/uuid.txt
     
+    iptables -I INPUT -p tcp --dport $pt_v2 -j ACCEPT >/dev/null 2>&1
+    ufw allow $pt_v2/tcp >/dev/null 2>&1
+    systemctl daemon-reload
     systemctl restart xray
     systemctl enable xray >/dev/null 2>&1
-    ufw allow $pt_v2/tcp >/dev/null 2>&1
     
     sleep 2
-    if systemctl is-active --quiet xray; then
-        echo -e "\n ${V}¡V2Ray Instalado y Activo con TLS!   ${N}"
+    if systemctl is-active --quiet xray && ss -tlnp | grep -qE ":${pt_v2}\b"; then
+        echo -e "\n ${V}¡V2Ray Instalado y Activo con TLS en puerto $pt_v2!   ${N}"
     else
         echo -e "\n ${R}ERROR: V2Ray no pudo iniciar.   ${N}"
     fi
@@ -1320,11 +1388,12 @@ EOF
     
     sed -i -E "s/\"port\": [0-9]+/\"port\": $pt_nuevo/" /usr/local/etc/xray/config.json
     echo "$pt_nuevo" > /usr/local/etc/xray/puerto.txt
+    iptables -I INPUT -p tcp --dport $pt_nuevo -j ACCEPT >/dev/null 2>&1
     ufw allow $pt_nuevo/tcp >/dev/null 2>&1
     systemctl restart xray
     
     sleep 2
-    if systemctl is-active --quiet xray; then
+    if systemctl is-active --quiet xray && ss -tlnp | grep -qE ":${pt_nuevo}\b"; then
         echo -e "\n ${V}¡Puerto modificado exitosamente al $pt_nuevo!   ${N}"
     else
         echo -e "\n ${R}ERROR: El puerto $pt_nuevo está bloqueado por el sistema. Intenta con otro.   ${N}"
@@ -1334,15 +1403,15 @@ EOF
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e " ${R}V2Ray no está instalado.   ${N}"; read -p " Enter..."; continue
     fi
-    dom_v2=$(cat /usr/local/etc/xray/dominio.txt)
-    pt_v2=$(cat /usr/local/etc/xray/puerto.txt)
-    UUID=$(cat /usr/local/etc/xray/uuid.txt)
+    dom_v2=$(cat /usr/local/etc/xray/dominio.txt | tr -d ' \n\r')
+    pt_v2=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
+    UUID=$(cat /usr/local/etc/xray/uuid.txt | tr -d ' \n\r')
     
     cat <<EOF > /tmp/vmess.json
 {
   "v": "2",
   "ps": "ZeroDay-V2Ray",
-  "add": "$dom_v2",
+  "add": "$IP_VPS",
   "port": "$pt_v2",
   "id": "$UUID",
   "aid": "0",
@@ -1361,12 +1430,13 @@ EOF
     
     clear
     echo -e "${C}=== TUS DATOS DE V2RAY ===   ${N}"
-    echo -e " ${W}🔹 Dominio Server :  ${N}${V}$dom_v2   ${N}"
+    echo -e " ${W}🔹 IP Servidor    :  ${N}${V}$IP_VPS   ${N}"
+    echo -e " ${W}🔹 Dominio / SNI  :  ${N}${V}$dom_v2   ${N}"
     echo -e " ${W}🔹 Puerto         :  ${N}${V}$pt_v2   ${N}"
     echo -e " ${W}🔹 UUID           :  ${N}${A}$UUID   ${N}"
     echo -e " ${W}🔹 Protocolo      : WebSocket (WS)   ${N}"
     echo -e " ${W}🔹 Path           : /zeroday   ${N}"
-    echo -e " ${W}🔹 Seguridad      : TLS (Activada)   ${N}"
+    echo -e " ${W}🔹 Seguridad      : TLS (AllowInsecure)   ${N}"
     echo -e "${C}================================================${N}"
     echo -e " 🔗  ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):   ${N}\n"
     echo -e " ${A}$VMESS_LINK   ${N}\n"
@@ -1463,7 +1533,8 @@ instalar_hcr() {
 
     echo -e " ${C}Descargando Binario HCR Original...   ${N}"
     rm -f /etc/hcr/hcr-server
-    apt-get install curl wget lsof coreutils -y >/dev/null 2>&1
+    apt-get update -y >/dev/null 2>&1
+    apt-get install curl wget lsof coreutils psmisc -y >/dev/null 2>&1
     
     MIRRORS=(
     "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/hcr-server"
@@ -1507,7 +1578,7 @@ fi
 EOF
     chmod +x /etc/hcr/start.sh
 
-    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
+    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
     
     liberar_puerto_fantasma "$p_inj" "hcr"
     
@@ -1628,7 +1699,8 @@ instalar_slowdns() {
 
     echo -e "\n ${V}⏳ Instalando dependencias...   ${N}"
     apt-get update -y > /dev/null 2>&1
-    apt-get install iptables curl wget dnsutils -y > /dev/null 2>&1
+    apt-get install iptables curl wget dnsutils lsof psmisc -y > /dev/null 2>&1
+    optimizar_sshd_estabilidad
 
     mkdir -p /etc/slowdns
     cd /etc/slowdns || return
@@ -1710,6 +1782,7 @@ WorkingDirectory=/etc/slowdns
 ExecStart=/etc/slowdns/dnstt-server -udp :5300 -privkey-file /etc/slowdns/server.key $dominio_ns 127.0.0.1:$puerto_local
 Restart=always
 RestartSec=3
+LimitNOFILE=65535
 
 [Install]
 WantedBy=multi-user.target
@@ -1803,12 +1876,12 @@ configurar_banner() {
 <font color="$c_html"><b>======================================</b></font><br>
 EOF
 
-    sed -i 's/#Banner none/Banner \/etc\/issue.net/g' /etc/ssh/sshd_config
-    sed -i 's/#Banner/Banner/g' /etc/ssh/sshd_config
-    sed -i '/^Banner /c\Banner \/etc\/issue.net' /etc/ssh/sshd_config
+    sed -i '/^Banner /d' /etc/ssh/sshd_config
+    echo "Banner /etc/issue.net" >> /etc/ssh/sshd_config
+    optimizar_sshd_estabilidad
 
-    systemctl restart ssh > /dev/null 2>&1
-    systemctl restart sshd > /dev/null 2>&1
+    systemctl reload ssh > /dev/null 2>&1 || systemctl restart ssh > /dev/null 2>&1
+    systemctl reload sshd > /dev/null 2>&1 || systemctl restart sshd > /dev/null 2>&1
 
     echo ""
     echo -e " ${V}¡Banner configurado con éxito!   ${N}"
@@ -1939,7 +2012,7 @@ case $op_inst in
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p " Enter..." ;;
 27) info_sistema; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
 30) menu_zona_horaria ;;
-31) systemctl restart ssh stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
+31) optimizar_sshd_estabilidad; systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; systemctl restart stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
 33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; read -p " Enter..." ;;
 34) passwd root; read -p " Enter..." ;;
 37) menu_hcr ;;
@@ -1966,7 +2039,7 @@ echo -e "${C}──────────────────────�
 echo -ne " ${W}► Opcion :   ${N}"; read opcion
 case $opcion in
 1|01) menu_usuarios ;;
-2|02) clear; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall Activo.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
+2|02) clear; optimizar_sshd_estabilidad; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -ne " ${W}Enter para continuar...   ${N}"; read ;;
 3|03) ver_usuarios_online ;;
 4|04|5|05|8|08) menu_protocolos ;;
 6|06) configurar_banner ;;
