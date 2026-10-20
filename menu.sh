@@ -1612,14 +1612,16 @@ while true; do
         1)
             clear
             echo -e "${C}================================================${N}"
-            echo -e " ${V}⏳ Instalando dependencias de Python y Mongo...   ${N}"
+            echo -e " ${V}⏳ Preparando motor Python y librerías de Telegram...   ${N}"
+            dpkg --configure -a >/dev/null 2>&1
             apt-get update -y >/dev/null 2>&1
-            apt-get install python3 python3-pip python3-dnspython -y >/dev/null 2>&1
-            echo -e " ${W}Esto puede tomar unos segundos...   ${N}"
-            pip3 install pyTelegramBotAPI pymongo dnspython --break-system-packages >/dev/null 2>&1 || pip3 install pyTelegramBotAPI pymongo dnspython >/dev/null 2>&1
+            apt-get install -y python3 python3-pip python3-pymongo python3-dnspython >/dev/null 2>&1
+            echo -e " ${W}Instalando módulos en modo ligero (512MB RAM)...   ${N}"
+            pip3 install --no-cache-dir --break-system-packages pyTelegramBotAPI pymongo dnspython >/dev/null 2>&1 || \
+            pip3 install --no-cache-dir pyTelegramBotAPI pymongo dnspython >/dev/null 2>&1
             
             mkdir -p /etc/zeroday_bot
-            echo -e " ${A}⚙️ Escribiendo el cerebro del Bot con tus Keys...   ${N}"
+            echo -e " ${A}⚙️ Grabando a Flexible (ID: 6414470898) como Dueño Único...   ${N}"
             
             cat << 'EOF_BOT' > /etc/zeroday_bot/bot.py
 import telebot
@@ -1630,10 +1632,10 @@ import string
 import os
 from datetime import datetime, timedelta
 
-# CREDENCIALES AUTOMATICAS ZERODAY
+# CREDENCIALES EXCLUSIVAS ZERODAY
 TOKEN = "8850791872:AAGGT83B_jnHTzmCf_uZVoMbHvgQov7RBHo"
 MONGO_URI = "mongodb+srv://martinoswaldo01_db_user:nlcZvCf5uxcBuRKr@cluster0.1hzsh2n.mongodb.net/?retryWrites=true&w=majority"
-ADMIN_SECRETO = "zerodayadmin"
+MI_ID_DUENO = 6414470898
 
 try:
     bot = telebot.TeleBot(TOKEN)
@@ -1641,36 +1643,59 @@ try:
     db = client['zeroday_vpn']
     keys_collection = db['keys']
     admins_collection = db['admins']
+    admins_collection.update_one({"chat_id": MI_ID_DUENO}, {"$set": {"role": "admin"}}, upsert=True)
 except Exception as e:
     print("Error conectando a Mongo o Telegram:", e)
     exit(1)
 
 def is_admin(chat_id):
-    return admins_collection.find_one({"chat_id": chat_id, "role": "admin"}) is not None
+    return chat_id == MI_ID_DUENO
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
-    texto = (
-        "🚀 *Bienvenido al Bot ZeroDay* 🚀\n\n"
-        "Para activar una cuenta SSH usa el formato:\n"
-        "`/usar <TU_KEY> <usuario> <contraseña>`\n\n"
-        "Ejemplo:\n`/usar ZD-1234 juan 123456`"
-    )
+    if is_admin(message.chat.id):
+        texto = (
+            "👑 *Panel de Dueño ZeroDay Activo* 👑\n\n"
+            "🔑 *Generar Key de Instalación (1 uso):*\n"
+            "`/key`\n\n"
+            "👤 *Generar Key con días y límite:*\n"
+            "`/gen <dias> <limite>` (Ej: `/gen 30 1`)\n\n"
+            "📲 *Canjear Key para crear cuenta SSH:*\n"
+            "`/usar <KEY> <usuario> <contraseña>`"
+        )
+    else:
+        texto = (
+            "🚀 *Bienvenido al Bot ZeroDay* 🚀\n\n"
+            "Para activar una cuenta SSH usa el formato:\n"
+            "`/usar <TU_KEY> <usuario> <contraseña>`\n\n"
+            "Ejemplo:\n`/usar ZD-1234 juan 123456`"
+        )
     bot.reply_to(message, texto, parse_mode="Markdown")
 
-@bot.message_handler(commands=['setadmin'])
-def set_admin(message):
-    args = message.text.split()
-    if len(args) == 2 and args[1] == ADMIN_SECRETO:
-        admins_collection.update_one({"chat_id": message.chat.id}, {"$set": {"role": "admin"}}, upsert=True)
-        bot.reply_to(message, "✅ *¡Felicidades!* Ahora eres el Dueño Administrador del Bot. Puedes crear llaves con /gen.", parse_mode="Markdown")
-    else:
-        bot.reply_to(message, "❌ Código secreto incorrecto o formato inválido.")
+@bot.message_handler(commands=['key'])
+def gen_quick_key(message):
+    if not is_admin(message.chat.id):
+        bot.reply_to(message, "⛔ Acceso denegado. Solo el dueño de ZeroDay puede generar llaves.")
+        return
+    
+    key = "ZD-" + ''.join(random.choices(string.ascii_uppercase + string.digits, k=6))
+    keys_collection.insert_one({
+        "key": key,
+        "dias": 30,
+        "limite": 1,
+        "usada": False,
+        "creada": datetime.now()
+    })
+    bot.reply_to(
+        message,
+        f"✅ *Key ZeroDay Generada (1 Solo Uso)*\n\n🔑 Key: `{key}`\n\n_(Toca la Key para copiarla)_",
+        parse_mode="Markdown"
+    )
 
 @bot.message_handler(commands=['gen'])
 def gen_key(message):
     if not is_admin(message.chat.id):
-        bot.reply_to(message, "⛔ Cuidado: No tienes permisos para crear llaves.")
+        bot.reply_to(message, "⛔ Acceso denegado. Solo el dueño de ZeroDay puede crear llaves.")
         return
     
     args = message.text.split()
@@ -1705,7 +1730,6 @@ def usar_key(message):
     user_ssh = args[2]
     pass_ssh = args[3]
     
-    # Buscar en MongoDB
     key_data = keys_collection.find_one({"key": key_input})
     
     if not key_data:
@@ -1715,7 +1739,6 @@ def usar_key(message):
         bot.reply_to(message, "❌ Esta Key ya fue utilizada por otra persona.")
         return
     
-    # Verificar si el nombre de usuario ya existe en Linux
     check_user = subprocess.run(["id", user_ssh], capture_output=True)
     if check_user.returncode == 0:
         bot.reply_to(message, "❌ Ese nombre de usuario ya está registrado. Por favor intenta de nuevo con un nombre distinto.")
@@ -1725,26 +1748,20 @@ def usar_key(message):
     limite = key_data["limite"]
     
     try:
-        # Crear usuario nativo en el VPS
         subprocess.run(["useradd", "-m", "-s", "/bin/bash", user_ssh])
         
-        # Ponerle la contraseña
         proc = subprocess.Popen(['chpasswd'], stdin=subprocess.PIPE)
         proc.communicate(input=f"{user_ssh}:{pass_ssh}".encode('utf-8'))
         
-        # Ponerle fecha de caducidad
         date_exp = (datetime.now() + timedelta(days=dias)).strftime("%Y-%m-%d")
         subprocess.run(["chage", "-E", date_exp, user_ssh])
         
-        # Fijar limite de conexiones simultaneas
         os.makedirs("/etc/vps_limites", exist_ok=True)
         with open(f"/etc/vps_limites/{user_ssh}", "w") as f:
             f.write(str(limite))
             
-        # Marcar la Key como gastada en MongoDB
         keys_collection.update_one({"_id": key_data["_id"]}, {"$set": {"usada": True, "user_ssh": user_ssh}})
         
-        # Instalar bloqueador de multi-login si no existe
         if not os.path.exists("/usr/local/bin/monitor_limites.sh"):
             monitor_code = "#!/bin/bash\nfor user in $(ls /etc/vps_limites/ 2>/dev/null); do\nlimite=$(cat /etc/vps_limites/$user)\nconex=$(ps -u$user 2>/dev/null | grep -c sshd)\nif [ \"$conex\" -gt \"$limite\" ]; then\npkill -u $user sshd\nfi\ndone\n"
             with open("/usr/local/bin/monitor_limites.sh", "w") as m:
@@ -1754,8 +1771,17 @@ def usar_key(message):
 
         bot.reply_to(message, f"✅ *¡Cuenta Creada Exitosamente en el Servidor!*\n\n👤 Usuario: `{user_ssh}`\n🔑 Clave: `{pass_ssh}`\n⏳ Válida hasta: {date_exp}\n📈 Límite: {limite} dispositivos", parse_mode="Markdown")
         
-    except Exception as e:
-        bot.reply_to(message, f"❌ Ocurrió un error al crear la cuenta en el VPS. Intenta de nuevo más tarde.")
+    except Exception:
+        bot.reply_to(message, "❌ Ocurrió un error al crear la cuenta en el VPS. Intenta de nuevo más tarde.")
+
+try:
+    bot.send_message(
+        MI_ID_DUENO,
+        "✅ *¡Bot ZeroDay En Línea!*\n👑 Hola *Flexible*, estás reconocido automáticamente como el **Dueño Único**.\n\nEscribe `/key` o `/gen 30 1` para crear tus llaves.",
+        parse_mode="Markdown"
+    )
+except Exception:
+    pass
 
 bot.infinity_polling()
 EOF_BOT
@@ -1780,13 +1806,12 @@ EOF_SRV
             systemctl daemon-reload
             systemctl enable zeroday-bot >/dev/null 2>&1
             systemctl restart zeroday-bot
-            sleep 2
+            sleep 3
             if systemctl is-active --quiet zeroday-bot; then
                 echo -e "\n ${V}¡EL BOT FUE INSTALADO Y ESTÁ CORRIENDO EN SEGUNDO PLANO!   ${N}"
                 echo -e " ${C}================================================${N}"
-                echo -e " ${W}Ve a Telegram ahora mismo y envíale a tu bot esto:  ${N}"
-                echo -e " ${A}/setadmin zerodayadmin${N}"
-                echo -e " ${W}Para darte permisos de creador de llaves.${N}"
+                echo -e " ${W}Ya estás registrado de fábrica como Dueño Único.${N}"
+                echo -e " ${W}Ve a tu Telegram y escribe:${N} ${A}/key${N} ${W}o${N} ${A}/gen 30 1${N}"
                 echo -e " ${C}================================================${N}"
             else
                 echo -e "\n ${R}Hubo un error al iniciar el Bot. Usa la opción 4 para ver logs.   ${N}"
