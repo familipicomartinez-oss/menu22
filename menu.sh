@@ -220,11 +220,12 @@ menu_limpiador_puertos() {
         echo -e " ${R}[7]${N} ${W}🔥 RESETEAR TODOS LOS PUERTOS Y PROTOCOLOS (LIMPIEZA TOTAL)   ${N}"
         echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
         echo -e "${C}================================================${N}"
-        read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_clean
+        echo -ne " ${W}► Opcion : ${N}"; read op_clean
 
         case $op_clean in
             1)
-                read -p "$(echo -e "\n ${W}► Ingresa el puerto fantasma a limpiar (Ej: 443):   ${N}")" pt_clean
+                echo -e "\n ${W}► Ingresa el puerto fantasma a limpiar (Ej: 443):${N}"
+                echo -ne " ${V}► ${N}"; read pt_clean
                 if [[ "$pt_clean" =~ ^[0-9]+$ ]] && [ "$pt_clean" != "22" ]; then
                     echo -e " ${A}⏳ Eliminando todo rastro del puerto $pt_clean...   ${N}"
                     liberar_puerto_fantasma "$pt_clean" "ninguno"
@@ -232,27 +233,27 @@ menu_limpiador_puertos() {
                 else
                     echo -e " ${R}Puerto inválido o protegido (22).   ${N}"
                 fi
-                read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
                 ;;
             2)
                 resetear_ssl_completo
-                read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
                 ;;
             3)
                 resetear_v2ray_completo
-                read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
                 ;;
             4)
                 resetear_python_completo
-                read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
                 ;;
             5)
                 resetear_ssr_completo
-                read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
                 ;;
             6)
                 resetear_hcr_completo
-                read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
                 ;;
             7)
                 echo -e "\n ${R}⚠️ Ejecutando limpieza profunda de TODOS los puertos fantasmas...   ${N}"
@@ -267,7 +268,7 @@ menu_limpiador_puertos() {
                 done
                 systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1
                 echo -e "\n ${V}¡LIMPIEZA TOTAL COMPLETADA! Todos los puertos están como nuevos.   ${N}"
-                read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
                 ;;
             0) break ;;
             *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
@@ -294,14 +295,17 @@ menu_zona_horaria() {
         echo -e " ${V}[6]${N} ${W}✍️  Escribir otra Zona Horaria manualmente   ${N}"
         echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
         echo -e "${C}================================================${N}"
-        read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_tz
+        echo -ne " ${W}► Opcion : ${N}"; read op_tz
         case $op_tz in
             1) TZ_SEL="America/Bogota" ;;
             2) TZ_SEL="America/Mexico_City" ;;
             3) TZ_SEL="America/Caracas" ;;
             4) TZ_SEL="America/Argentina/Buenos_Aires" ;;
             5) TZ_SEL="America/New_York" ;;
-            6) read -p "$(echo -e " ${W}► Escribe tu Zona (Ej: America/Bogota):   ${N}")" TZ_SEL ;;
+            6) 
+                echo -e " ${W}► Escribe tu Zona (Ej: America/Bogota):${N}"
+                echo -ne " ${V}► ${N}"; read TZ_SEL 
+                ;;
             0) break ;;
             *) continue ;;
         esac
@@ -314,7 +318,7 @@ menu_zona_horaria() {
         else
             echo -e "\n ${R}Zona horaria no encontrada.   ${N}"
         fi
-        read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+        echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
     done
 }
 
@@ -353,7 +357,6 @@ agregar_puerto() {
 
 ss -tlnp | grep -qE ":22\b" && agregar_puerto "🔹 SSH: ${V}22${N}"
 
-# V2RAY Dinámico
 if [ -f /usr/local/etc/xray/puerto.txt ]; then
     PT_V2=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
     if [ -n "$PT_V2" ] && ss -tlnp | grep -qE ":${PT_V2}\b"; then
@@ -361,7 +364,6 @@ if [ -f /usr/local/etc/xray/puerto.txt ]; then
     fi
 fi
 
-# SHADOWSOCKS-R Dinámico
 if [ -f /etc/ssr/puerto.txt ]; then
     PT_SSR=$(cat /etc/ssr/puerto.txt | tr -d ' \n\r')
     if [ -n "$PT_SSR" ] && ss -tlnp | grep -qE ":${PT_SSR}\b"; then
@@ -369,7 +371,6 @@ if [ -f /etc/ssr/puerto.txt ]; then
     fi
 fi
 
-# PROXY PYTHON Dinámico
 if [ -f /etc/proxy.py ]; then
     PT_PY=$(grep "bind" /etc/proxy.py | awk -F',' '{print $2}' | tr -d ' )\n\r')
     if [ -n "$PT_PY" ] && ss -tlnp | grep -qE ":${PT_PY}\b"; then
@@ -377,7 +378,6 @@ if [ -f /etc/proxy.py ]; then
     fi
 fi
 
-# SSL STUNNEL Dinámico
 if [ -f /etc/stunnel/stunnel.conf ]; then
     for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $NF}' | awk -F':' '{print $NF}' | tr -d ' \n\r'); do
         if [ -n "$p_ssl" ] && ss -tlnp | grep -qE ":${p_ssl}\b"; then
@@ -417,9 +417,6 @@ echo -e " ${W}🔹 U/RAM:  ${N}${M}${PORCENT_RAM}%  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 }
 
-# ==========================================
-# MOTOR DE VERIFICACIÓN ONLINE CON CONTADOR
-# ==========================================
 ver_usuarios_online() {
     clear
     echo -e "${C}================================================${N}"
@@ -464,7 +461,7 @@ ver_usuarios_online() {
         done
     fi
     echo -e "${C}────────────────────────────────────────────────────────${N}"
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 }
 
 menu_usuarios() {
@@ -479,17 +476,26 @@ echo -e " ${C}[2]${N} ${W}🗑️  ELIMINAR USUARIO   ${N}"
 echo -e " ${C}[3]${N} ${W}👥 VER LISTADO DE USUARIOS   ${N}"
 echo -e " ${V}[4]${N} ${W}📡 MONITOREO DE USUARIOS ONLINE   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  VOLVER   ${N}"
-read -p "$(echo -e " ${W}► Opcion:   ${N}")" op_user
+echo -ne " ${W}► Opcion : ${N}"; read op_user
 case $op_user in
 1)
 clear
 echo -e "${C}================================================${N}"
 echo -e "       ${A}⚜️  CREADOR DE CUENTAS TIPO ⚜️   ${N}"
 echo -e "${C}================================================${N}"
-read -p "$(echo -e " ${W}👤 Nombre de usuario:   ${N}")" u
-read -p "$(echo -e " ${W}🔑 Contraseña:   ${N}")" p
-read -p "$(echo -e " ${W}⏳ Dias de duración:   ${N}")" d; d=${d:-30}
-read -p "$(echo -e " ${W}📈 Límite de conexiones simultáneas (Ej: 2):   ${N}")" l; l=${l:-2}
+
+echo -e " ${W}👤 Nombre de usuario:${N}"
+echo -ne " ${V}► ${N}"; read u
+
+echo -e " ${W}🔑 Contraseña:${N}"
+echo -ne " ${V}► ${N}"; read p
+
+echo -e " ${W}⏳ Dias de duración (Ej: 30):${N}"
+echo -ne " ${V}► ${N}"; read d; d=${d:-30}
+
+echo -e " ${W}📈 Límite de conexiones simultáneas (Ej: 2):${N}"
+echo -ne " ${V}► ${N}"; read l; l=${l:-2}
+
 optimizar_sshd_estabilidad
 useradd -m -s /bin/bash "$u" 2>/dev/null
 echo "$u:$p" | chpasswd 2>/dev/null
@@ -497,17 +503,12 @@ chage -E $(date -d "+$d days" +%Y-%m-%d) "$u" 2>/dev/null || true
 mkdir -p /etc/vps_limites
 echo "$l" > "/etc/vps_limites/$u"
 
-# Corrección en el cronjob para evitar que mate conexiones por error
 cat << 'EOF_MONITOR' > /usr/local/bin/monitor_limites.sh
 #!/bin/bash
-# Script optimizado para detectar IPs reales en lugar de procesos locales sshd
 for user in $(ls /etc/vps_limites/ 2>/dev/null); do
     limite=$(cat /etc/vps_limites/$user 2>/dev/null | tr -d ' \n\r')
     [[ ! "$limite" =~ ^[0-9]+$ ]] && continue
-    
-    # Contar cuántas IPs DISTINTAS están conectadas al usuario (Para Dropbear y OpenSSH)
     conex_reales=$(netstat -anp 2>/dev/null | grep ESTABLISHED | grep "sshd: $user\|dropbear" | awk '{print $5}' | cut -d: -f1 | sort | uniq | wc -l)
-    
     if [ "$conex_reales" -gt "$limite" ]; then
         pkill -u "$user" > /dev/null 2>&1
         killall -u "$user" > /dev/null 2>&1
@@ -555,10 +556,18 @@ echo -e "${C}──────────────────────�
 echo -e " ${R}✓ El servidor desconectará automáticamente al   ${N}"
 echo -e " ${R}  usuario si supera el límite de $l conexiones.   ${N}"
 echo -e "${C}================================================${N}"
-read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 ;;
-2) read -p "$(echo -e " ${W}Usuario a eliminar:   ${N}")" u; pkill -u "$u" 2>/dev/null; userdel -r -f "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"; read -p " Enter..." ;;
-3) awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd; read -p " Enter..." ;;
+2) 
+    echo -e " ${W}👤 Usuario a eliminar:${N}"
+    echo -ne " ${V}► ${N}"; read u
+    pkill -u "$u" 2>/dev/null; userdel -r -f "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read 
+;;
+3) 
+    awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read 
+;;
 4) ver_usuarios_online ;;
 0) break ;;
 esac
@@ -579,11 +588,12 @@ echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar Todo   ${N}"
 echo -e " ${A}[6]${N} ${W}🧹 Resetear / Limpiar Puertos Fantasmas SSL   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
 echo -e "${C}----------------------------------------${N}"
-read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_ssl
+echo -ne " ${W}► Opcion : ${N}"; read op_ssl
 case $op_ssl in
 1)
 p1=22
-read -p "$(echo -e " ${W}► Puerto externo SSL a elegir (Ej: 443, 444):   ${N}")" p2; p2=${p2:-443}
+echo -e " ${W}► Puerto externo SSL a elegir (Ej: 443, 444):${N}"
+echo -ne " ${V}► ${N}"; read p2; p2=${p2:-443}
 echo -e " ${A}⏳ Limpiando posibles puertos fantasmas en $p2 y preparando Stunnel4...   ${N}"
 apt-get update -y >/dev/null 2>&1
 apt-get install stunnel4 openssl psmisc lsof -y >/dev/null 2>&1
@@ -646,18 +656,21 @@ else
     echo -e " ${R}ERROR: Stunnel4 no pudo iniciar en el puerto $p2. Detalles del sistema:   ${N}"
     journalctl -u stunnel4.service -n 5 --no-pager
 fi
-read -p " Enter..." ;;
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read 
+;;
 2)
 if [ ! -f /etc/stunnel/stunnel.conf ]; then
     echo -e "\n ${R}ERROR: Debes Instalar el SSL primero (Opción 1).   ${N}"
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
     continue
 fi
 echo -e "\n${C}=== ADICIONAR PUERTO SSL ===   ${N}"
-read -p "$(echo -e " ${W}► Puerto Local Interno (Default: 22):   ${N}")" p_int; p_int=${p_int:-22}
-read -p "$(echo -e " ${W}► NUEVO Puerto SSL a escuchar (Ej: 444, 445):   ${N}")" p_ext
+echo -e " ${W}► Puerto Local Interno (Default: 22):${N}"
+echo -ne " ${V}► ${N}"; read p_int; p_int=${p_int:-22}
+echo -e " ${W}► NUEVO Puerto SSL a escuchar (Ej: 444, 445):${N}"
+echo -ne " ${V}► ${N}"; read p_ext
 if [ -z "$p_ext" ]; then
-    echo -e " ${R}Cancelado.  ${N}"; read -p " Enter..."; continue
+    echo -e " ${R}Cancelado.  ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
 fi
 systemctl stop stunnel4 >/dev/null 2>&1
 pkill -9 stunnel4 >/dev/null 2>&1
@@ -685,12 +698,12 @@ if systemctl is-active --quiet stunnel4 && ss -tlnp | grep -qE ":${p_ext}\b"; th
 else
     echo -e "\n ${R}Error al levantar el puerto $p_ext. Verifica que no esté ocupado.   ${N}"
 fi
-read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 ;;
 3)
 if [ ! -f /etc/stunnel/stunnel.conf ]; then
     echo -e "\n ${R}ERROR: No hay SSL instalado.   ${N}"
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
     continue
 fi
 clear
@@ -705,9 +718,10 @@ else
     done
 fi
 echo -e "${C}────────────────────────────────────────${N}"
-read -p "$(echo -e " ${W}► Ingresa el puerto a eliminar:   ${N}")" p_del
+echo -e " ${W}► Ingresa el puerto a eliminar:${N}"
+echo -ne " ${V}► ${N}"; read p_del
 if [ -z "$p_del" ]; then
-    echo -e " ${R}Cancelado.  ${N}"; read -p " Enter..."; continue
+    echo -e " ${R}Cancelado.  ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
 fi
 
 if grep -qE "^accept[[:space:]]*=[[:space:]]*$p_del$" /etc/stunnel/stunnel.conf; then
@@ -736,36 +750,27 @@ if grep -qE "^accept[[:space:]]*=[[:space:]]*$p_del$" /etc/stunnel/stunnel.conf;
 else
     echo -e "\n ${R}El puerto $p_del no existe en la configuración.   ${N}"
 fi
-read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 ;;
-4) systemctl stop stunnel4 >/dev/null 2>&1; pkill -9 stunnel4 >/dev/null 2>&1; echo -e " ${A}Detenido y puertos liberados.   ${N}"; read -p " Enter..." ;;
-5) resetear_ssl_completo; rm -f /etc/systemd/system/stunnel4.service; systemctl daemon-reload; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
-6) resetear_ssl_completo; read -p " Enter..." ;;
+4) systemctl stop stunnel4 >/dev/null 2>&1; pkill -9 stunnel4 >/dev/null 2>&1; echo -e " ${A}Detenido y puertos liberados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+5) resetear_ssl_completo; rm -f /etc/systemd/system/stunnel4.service; systemctl daemon-reload; apt-get purge stunnel4 -y >/dev/null 2>&1; rm -rf /etc/stunnel/; echo -e " ${R}Desinstalado.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+6) resetear_ssl_completo; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 0) break ;;
 *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1 ;;
 esac
 done
 }
 
-# ==========================================
-# MÓDULO SHADOWSOCKS-R NATIVO (OPCIÓN 5)
-# ==========================================
-b64_url() {
-    echo -n "$1" | base64 -w 0 | tr '+/' '-_' | tr -d '='
-}
-
+b64_url() { echo -n "$1" | base64 -w 0 | tr '+/' '-_' | tr -d '='; }
 generar_enlaces_ssr() {
     if [ ! -f /etc/ssr/datos.conf ]; then return; fi
     source /etc/ssr/datos.conf
-
     PASS_B64=$(b64_url "$SSR_PASS")
     REMARKS_B64=$(b64_url "$SSR_USER")
     OBFSPARAM_B64=$(b64_url "$SSR_OBFS_PARAM")
     PROTPARAM_B64=$(b64_url "")
-
     RAW_SSR="${SSR_IP}:${SSR_PORT}:${SSR_PROTO}:${SSR_METHOD}:${SSR_OBFS}:${PASS_B64}/?obfsparam=${OBFSPARAM_B64}&protoparam=${PROTPARAM_B64}&remarks=${REMARKS_B64}&group=$(b64_url "ZeroDay")"
     SSR_LINK="ssr://$(b64_url "$RAW_SSR")"
-
     RAW_SS="${SSR_METHOD}:${SSR_PASS}@${SSR_IP}:${SSR_PORT}"
     SS_LINK="ss://$(echo -n "$RAW_SS" | base64 -w 0)#${SSR_USER}"
 }
@@ -778,7 +783,7 @@ mostrar_info_ssr() {
     if [ ! -f /etc/ssr/datos.conf ]; then
         echo -e " ${R}[!] ShadowsocksR no está instalado.   ${N}"
         echo -e "${C}================================================${N}"
-        read -p "$(echo -e " ${W}► Presiona Enter para volver...   ${N}")"
+        echo -e "\n ${W}► Presiona Enter para volver...${N}"; read
         return
     fi
     generar_enlaces_ssr
@@ -796,7 +801,7 @@ mostrar_info_ssr() {
     echo -e " ${V}🔗 LINK SS CLÁSICO:   ${N}"
     echo -e " ${W}$SS_LINK   ${N}"
     echo -e "${C}================================================${N}"
-    read -p "$(echo -e " ${W}► Presiona Enter para continuar...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 }
 
 configurar_cuenta_ssr() {
@@ -805,84 +810,59 @@ configurar_cuenta_ssr() {
     echo -e "     ${A}⚙️ PARÁMETROS DE CUENTA SHADOWSOCKS-R ⚙️   ${N}"
     echo -e "${C}================================================${N}"
 
-    read -p "$(echo -e " ${W}► IP o Dominio [Enter = $IP_VPS]:   ${N}")" ssr_ip
+    echo -e " ${W}► IP o Dominio [Enter = $IP_VPS]:${N}"
+    echo -ne " ${V}► ${N}"; read ssr_ip
     ssr_ip=${ssr_ip:-$IP_VPS}
 
-    read -p "$(echo -e " ${W}► Nombre de Usuario [Default: ZeroDay]:   ${N}")" ssr_user
+    echo -e " ${W}► Nombre de Usuario [Default: ZeroDay]:${N}"
+    echo -ne " ${V}► ${N}"; read ssr_user
     ssr_user=${ssr_user:-ZeroDay}
 
-    read -p "$(echo -e " ${W}► Puerto SSR (Ej: 110, 443, 8388) [Default: 110]:   ${N}")" ssr_port
+    echo -e " ${W}► Puerto SSR (Ej: 110, 443) [Default: 110]:${N}"
+    echo -ne " ${V}► ${N}"; read ssr_port
     ssr_port=${ssr_port:-110}
 
-    read -p "$(echo -e " ${W}► Contraseña [Default: zeroday123]:   ${N}")" ssr_pass
+    echo -e " ${W}► Contraseña [Default: zeroday123]:${N}"
+    echo -ne " ${V}► ${N}"; read ssr_pass
     ssr_pass=${ssr_pass:-zeroday123}
 
     echo -e "\n ${A}Seleccione Tipo de Encriptación:   ${N}"
-    echo -e " ${V}[1]${N} ${W}aes-256-cfb (Recomendado / Clásico)   ${N}"
+    echo -e " ${V}[1]${N} ${W}aes-256-cfb (Recomendado)   ${N}"
     echo -e " ${V}[2]${N} ${W}aes-128-cfb   ${N}"
-    echo -e " ${V}[3]${N} ${W}aes-256-ctr   ${N}"
-    echo -e " ${V}[4]${N} ${W}aes-128-ctr   ${N}"
-    echo -e " ${V}[5]${N} ${W}chacha20-ietf   ${N}"
-    echo -e " ${V}[6]${N} ${W}chacha20   ${N}"
-    echo -e " ${V}[7]${N} ${W}rc4-md5   ${N}"
-    echo -e " ${V}[8]${N} ${W}none (Sin cifrado)   ${N}"
-    read -p "$(echo -e " ${W}► Opción [Default 1]:   ${N}")" op_enc
+    echo -e " ${W}► Opción [Default 1]:${N}"
+    echo -ne " ${V}► ${N}"; read op_enc
     case $op_enc in
         2) ssr_method="aes-128-cfb" ;;
-        3) ssr_method="aes-256-ctr" ;;
-        4) ssr_method="aes-128-ctr" ;;
-        5) ssr_method="chacha20-ietf" ;;
-        6) ssr_method="chacha20" ;;
-        7) ssr_method="rc4-md5" ;;
-        8) ssr_method="none" ;;
         *) ssr_method="aes-256-cfb" ;;
     esac
 
     echo -e "\n ${A}Seleccione Protocolo SSR:   ${N}"
-    echo -e " ${V}[1]${N} ${W}origin (Recomendado / Compatible SS)   ${N}"
+    echo -e " ${V}[1]${N} ${W}origin (Recomendado)   ${N}"
     echo -e " ${V}[2]${N} ${W}auth_sha1_v4   ${N}"
-    echo -e " ${V}[3]${N} ${W}auth_aes128_md5   ${N}"
-    echo -e " ${V}[4]${N} ${W}auth_aes128_sha1   ${N}"
-    echo -e " ${V}[5]${N} ${W}auth_chain_a   ${N}"
-    echo -e " ${V}[6]${N} ${W}auth_chain_b   ${N}"
-    read -p "$(echo -e " ${W}► Opción [Default 1]:   ${N}")" op_proto
+    echo -e " ${W}► Opción [Default 1]:${N}"
+    echo -ne " ${V}► ${N}"; read op_proto
     case $op_proto in
         2) ssr_proto="auth_sha1_v4" ;;
-        3) ssr_proto="auth_aes128_md5" ;;
-        4) ssr_proto="auth_aes128_sha1" ;;
-        5) ssr_proto="auth_chain_a" ;;
-        6) ssr_proto="auth_chain_b" ;;
         *) ssr_proto="origin" ;;
     esac
-
-    if [ "$ssr_proto" != "origin" ]; then
-        read -p "$(echo -e " ${W}► ¿Activar modo compatible con SS clásico? (s/n) [Default: s]:   ${N}")" comp_p
-        comp_p=${comp_p:-s}
-        [[ "$comp_p" == "s" || "$comp_p" == "S" ]] && ssr_proto_cfg="${ssr_proto}_compatible" || ssr_proto_cfg="$ssr_proto"
-    else
-        ssr_proto_cfg="origin"
-    fi
+    ssr_proto_cfg="$ssr_proto"
 
     echo -e "\n ${A}Seleccione Método de Ofuscación (OBFS):   ${N}"
-    echo -e " ${V}[1]${N} ${W}tls1.2_ticket_auth (Ideal para Host/SNI)   ${N}"
-    echo -e " ${V}[2]${N} ${W}http_simple (Payload HTTP Host)   ${N}"
-    echo -e " ${V}[3]${N} ${W}http_post   ${N}"
-    echo -e " ${V}[4]${N} ${W}random_head   ${N}"
-    echo -e " ${V}[5]${N} ${W}plain (Sin ofuscación)   ${N}"
-    read -p "$(echo -e " ${W}► Opción [Default 1]:   ${N}")" op_obfs
+    echo -e " ${V}[1]${N} ${W}tls1.2_ticket_auth (Ideal para SNI)   ${N}"
+    echo -e " ${V}[2]${N} ${W}http_simple   ${N}"
+    echo -e " ${V}[3]${N} ${W}plain (Sin ofuscación)   ${N}"
+    echo -e " ${W}► Opción [Default 1]:${N}"
+    echo -ne " ${V}► ${N}"; read op_obfs
     case $op_obfs in
         2) ssr_obfs="http_simple" ;;
-        3) ssr_obfs="http_post" ;;
-        4) ssr_obfs="random_head" ;;
-        5) ssr_obfs="plain" ;;
+        3) ssr_obfs="plain" ;;
         *) ssr_obfs="tls1.2_ticket_auth" ;;
     esac
 
     if [ "$ssr_obfs" != "plain" ]; then
-        read -p "$(echo -e " ${W}► ¿Activar OBFS compatible con SS clásico? (s/n) [Default: s]:   ${N}")" comp_o
-        comp_o=${comp_o:-s}
-        [[ "$comp_o" == "s" || "$comp_o" == "S" ]] && ssr_obfs_cfg="${ssr_obfs}_compatible" || ssr_obfs_cfg="$ssr_obfs"
-        read -p "$(echo -e " ${W}► Obfs Param / Host Bug (Ej: c.whatsapp.net) [Opcional]:   ${N}")" ssr_obfs_param
+        ssr_obfs_cfg="$ssr_obfs"
+        echo -e " ${W}► Obfs Param / Host Bug (Ej: c.whatsapp.net) [Opcional]:${N}"
+        echo -ne " ${V}► ${N}"; read ssr_obfs_param
     else
         ssr_obfs_cfg="plain"
         ssr_obfs_param=""
@@ -912,7 +892,6 @@ configurar_cuenta_ssr() {
     "workers": 1
 }
 EOF
-
     cat <<EOF > /etc/ssr/datos.conf
 SSR_IP="$ssr_ip"
 SSR_USER="$ssr_user"
@@ -924,31 +903,18 @@ SSR_OBFS="$ssr_obfs"
 SSR_OBFS_PARAM="$ssr_obfs_param"
 EOF
     echo "$ssr_port" > /etc/ssr/puerto.txt
-
     iptables -I INPUT -p tcp --dport "$ssr_port" -j ACCEPT 2>/dev/null
-    iptables -I INPUT -p udp --dport "$ssr_port" -j ACCEPT 2>/dev/null
     ufw allow "$ssr_port"/tcp >/dev/null 2>&1
-    ufw allow "$ssr_port"/udp >/dev/null 2>&1
 }
 
 instalar_ssr() {
     configurar_cuenta_ssr
-    echo -e "\n ${V}⏳ Instalando dependencias y librerías C/C++ (libsodium)...   ${N}"
+    echo -e "\n ${V}⏳ Instalando dependencias y librerías C/C++...   ${N}"
     apt-get update -y >/dev/null 2>&1
     apt-get install -y python3 git curl wget libsodium-dev openssl lsof psmisc >/dev/null 2>&1
-
     rm -rf /usr/local/shadowsocksr
-    echo -e " ${V}⏳ Descargando motor oficial ShadowsocksR...   ${N}"
     git clone -q -b akkariiin/master https://github.com/shadowsocksrr/shadowsocksr.git /usr/local/shadowsocksr 2>/dev/null || \
     git clone -q https://github.com/shadowsocksr-backup/shadowsocksr.git /usr/local/shadowsocksr 2>/dev/null
-
-    if [ ! -d "/usr/local/shadowsocksr/shadowsocks" ]; then
-        echo -e "\n ${R}[!] Error al clonar el repositorio base de ShadowsocksR.   ${N}"
-        read -p "$(echo -e " ${W}► Presiona Enter para continuar...   ${N}")"
-        return
-    fi
-
-    echo -e " ${V}🔧 Aplicando parches de ingeniería para Debian/Ubuntu (OpenSSL 3 & Python 3)...   ${N}"
     find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/collections\.MutableMapping/collections.abc.MutableMapping/g' {} + 2>/dev/null
     find /usr/local/shadowsocksr -name "*.py" -exec sed -i 's/EVP_CIPHER_CTX_cleanup/EVP_CIPHER_CTX_reset/g' {} + 2>/dev/null
 
@@ -956,7 +922,6 @@ instalar_ssr() {
 [Unit]
 Description=ShadowsocksR Native Server (ZeroDay)
 After=network.target
-
 [Service]
 Type=simple
 User=root
@@ -965,26 +930,20 @@ ExecStart=/usr/bin/python3 /usr/local/shadowsocksr/shadowsocks/server.py -c /etc
 Restart=always
 RestartSec=3
 LimitNOFILE=65535
-
 [Install]
 WantedBy=multi-user.target
 EOF
-
-    PT_NOW=$(cat /etc/ssr/puerto.txt | tr -d ' \n\r')
-    liberar_puerto_fantasma "$PT_NOW" "ssr"
-
     systemctl daemon-reload
     systemctl enable ssr-server >/dev/null 2>&1
     systemctl restart ssr-server
     sleep 2
-
     if systemctl is-active --quiet ssr-server; then
         echo -e "\n ${V}¡SHADOWSOCKS-R INSTALADO Y ACTIVO CON ÉXITO!   ${N}"
         sleep 1
         mostrar_info_ssr
     else
         echo -e "\n ${R}[!] El servicio SSR no pudo arrancar. Verifica que el puerto esté libre.   ${N}"
-        read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+        echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
     fi
 }
 
@@ -1003,12 +962,10 @@ while true; do
     echo -e " ${C}[3]${N} ${W}⚙️ Modificar Usuario / Puerto / Cifrado   ${N}"
     echo -e " ${V}[4]${N} ${W}▶️ Iniciar / Reiniciar ShadowsocksR   ${N}"
     echo -e " ${A}[5]${N} ${W}⏸️ Detener ShadowsocksR   ${N}"
-    echo -e " ${C}[6]${N} ${W}📋 Ver Registro de Eventos (Logs)   ${N}"
     echo -e " ${R}[7]${N} ${W}🗑️ Desinstalar ShadowsocksR   ${N}"
     echo -e " ${C}[0]${N} ${W}↩️ REGRESAR AL MENÚ   ${N}"
     echo -e "${C}------------------------------------------------${N}"
-    read -p "$(echo -e " ${W}► Opción :   ${N}")" op_ssr
-
+    echo -ne " ${W}► Opción : ${N}"; read op_ssr
     case $op_ssr in
         1) instalar_ssr ;;
         2) mostrar_info_ssr ;;
@@ -1028,25 +985,11 @@ while true; do
                 mostrar_info_ssr
             fi
             ;;
-        4)
-            systemctl restart ssr-server 2>/dev/null
-            sleep 1
-            echo -e "\n ${V}¡Servicio ShadowsocksR reiniciado!   ${N}"
-            read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
-            ;;
-        5)
-            systemctl stop ssr-server 2>/dev/null
-            echo -e "\n ${A}Servicio ShadowsocksR detenido.   ${N}"
-            read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
-            ;;
-        6)
-            clear
-            echo -e "${A}=== LOGS EN TIEMPO REAL DE SHADOWSOCKS-R ===   ${N}"
-            journalctl -u ssr-server -n 35 --no-pager
-            read -p "$(echo -e "\n ${W}► Enter para regresar...   ${N}")"
-            ;;
+        4) systemctl restart ssr-server 2>/dev/null; echo -e "\n ${V}¡Servicio ShadowsocksR reiniciado!   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+        5) systemctl stop ssr-server 2>/dev/null; echo -e "\n ${A}Servicio ShadowsocksR detenido.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
         7)
-            read -p "$(echo -e "\n ${W}► ¿Seguro que deseas eliminar ShadowsocksR? (s/n):   ${N}")" conf_del
+            echo -e "\n ${W}► ¿Seguro que deseas eliminar ShadowsocksR? (s/n):${N}"
+            echo -ne " ${V}► ${N}"; read conf_del
             if [[ "$conf_del" == "s" || "$conf_del" == "S" ]]; then
                 resetear_ssr_completo
                 systemctl disable ssr-server 2>/dev/null
@@ -1054,7 +997,7 @@ while true; do
                 systemctl daemon-reload
                 echo -e "\n ${V}ShadowsocksR desinstalado por completo.   ${N}"
             fi
-            read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+            echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
             ;;
         0) break ;;
         *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
@@ -1073,10 +1016,11 @@ echo -e " ${A}[4]${N} ${W}⏸️  Detener Proxy   ${N}"
 echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar / Resetear Puerto Python   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
 echo -e "${C}----------------------------------------${N}"
-read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_py
+echo -ne " ${W}► Opcion : ${N}"; read op_py
 case $op_py in
 3)
-read -p "$(echo -e " ${W}► Puerto para el WebSocket (Ej: 80):   ${N}")" pt; pt=${pt:-80}
+echo -e " ${W}► Puerto para el WebSocket (Ej: 80):${N}"
+echo -ne " ${V}► ${N}"; read pt; pt=${pt:-80}
 echo -e " ${A}Liberando el puerto $pt de rastros fantasmas y preparando Python...   ${N}"
 optimizar_sshd_estabilidad
 systemctl stop apache2 nginx dropbear proxypy 2>/dev/null
@@ -1139,9 +1083,9 @@ systemctl daemon-reload; systemctl enable proxypy >/dev/null 2>&1; systemctl res
 iptables -I INPUT -p tcp --dport $pt -j ACCEPT >/dev/null 2>&1
 ufw allow $pt/tcp >/dev/null 2>&1
 echo -e " ${V}¡WebSocket PRO Activo y Blindado en el puerto $pt!   ${N}"
-read -p " Enter..." ;;
-4) systemctl stop proxypy >/dev/null 2>&1; pkill -9 -f "/etc/proxy.py" >/dev/null 2>&1; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-5) resetear_python_completo; read -p " Enter..." ;;
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+4) systemctl stop proxypy >/dev/null 2>&1; pkill -9 -f "/etc/proxy.py" >/dev/null 2>&1; echo -e " ${A}Detenido.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+5) resetear_python_completo; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 0) break ;;
 esac
 done
@@ -1158,7 +1102,7 @@ echo -e " ${A}[2]${N} ${W}⏸️  Detener UDP   ${N}"
 echo -e " ${R}[3]${N} ${W}🗑️  Desinstalar UDP   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
 echo -e "${C}----------------------------------------${N}"
-read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_udp
+echo -ne " ${W}► Opcion : ${N}"; read op_udp
 case $op_udp in
 1)
 echo -e " ${W}Instalando servidor UDP Custom...   ${N}"
@@ -1173,9 +1117,9 @@ iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 3671
 iptables -t nat -A PREROUTING -p udp -m multiport ! --dports 53,5300,443,7200,7300 -j REDIRECT --to-ports 36712 2>/dev/null || iptables -t nat -A PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null
 ufw allow 36712/udp >/dev/null 2>&1
 echo -e " ${V}¡UDP Custom Instalado y Activo (Puerto 36712)!   ${N}"
-read -p " Enter..." ;;
-2) systemctl stop udp-custom; echo -e " ${A}Detenido.   ${N}"; read -p " Enter..." ;;
-3) systemctl stop udp-custom; rm -rf /usr/bin/udp-custom /root/udp /etc/systemd/system/udp-custom.service; systemctl daemon-reload; iptables -t nat -D PREROUTING -p udp -m multiport ! --dports 53,5300,443,7200,7300 -j REDIRECT --to-ports 36712 2>/dev/null; iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null; echo -e " ${R}Desinstalado.   ${N}"; read -p " Enter..." ;;
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+2) systemctl stop udp-custom; echo -e " ${A}Detenido.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+3) systemctl stop udp-custom; rm -rf /usr/bin/udp-custom /root/udp /etc/systemd/system/udp-custom.service; systemctl daemon-reload; iptables -t nat -D PREROUTING -p udp -m multiport ! --dports 53,5300,443,7200,7300 -j REDIRECT --to-ports 36712 2>/dev/null; iptables -t nat -D PREROUTING -p udp --dport 1:65535 -j REDIRECT --to-ports 36712 2>/dev/null; echo -e " ${R}Desinstalado.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 0) break ;;
 esac
 done
@@ -1194,11 +1138,11 @@ echo -e " ${A}[2]${N} ${W}⏸️  Detener BadVPN   ${N}"
 echo -e " ${R}[3]${N} ${W}🗑️  Desinstalar BadVPN   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
 echo -e "${C}----------------------------------------${N}"
-read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_badvpn
+echo -ne " ${W}► Opcion : ${N}"; read op_badvpn
 case $op_badvpn in
 1)
 clear
-echo -e "${C}=== INSTALACIÓN NATIVA BADVPN (ZERO-DEPENDENCIAS) ===   ${N}"
+echo -e "${C}=== INSTALACIÓN NATIVA BADVPN ===   ${N}"
 systemctl stop badvpn7200 2>/dev/null
 systemctl stop badvpn7300 2>/dev/null
 killall -9 badvpn-udpgw 2>/dev/null
@@ -1210,7 +1154,6 @@ apt-get install -y curl wget coreutils lsof psmisc >/dev/null 2>&1
 mkdir -p /usr/bin
 rm -f /usr/bin/badvpn-udpgw
 
-# 1. Intenta primero desde TU PROPIO repositorio personal de GitHub (familipicomartinez-oss)
 curl -4 -fsSL --connect-timeout 8 --max-time 20 "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/badvpn-udpgw" -o /usr/bin/badvpn-udpgw 2>/dev/null
 TAM_B=$(wc -c < /usr/bin/badvpn-udpgw 2>/dev/null || echo 0)
 if [ "$TAM_B" -gt 50000 ]; then
@@ -1222,9 +1165,8 @@ else
     rm -f /usr/bin/badvpn-udpgw
 fi
 
-# 2. Compilación 100% Oficial en Lenguaje C desde el código fuente original (Funciona en TODOS los Ubuntu y Debian)
 if [ ! -x /usr/bin/badvpn-udpgw ]; then
-    echo -e " ${A}⚙️ Compilando motor BadVPN propio directamente en tu sistema...   ${N}"
+    echo -e " ${A}⚙️ Compilando motor BadVPN...   ${N}"
     apt-get install -y cmake build-essential gcc g++ make git >/dev/null 2>&1
     rm -rf /tmp/badvpn_src
     git clone --depth 1 -q https://github.com/ambrop72/badvpn.git /tmp/badvpn_src 2>/dev/null
@@ -1244,7 +1186,7 @@ if [ ! -x /usr/bin/badvpn-udpgw ]; then
 fi
 
 if [ -x /usr/bin/badvpn-udpgw ]; then
-    echo -e " ${V}Binario oficial instalado y purificado.   ${N}"
+    echo -e " ${V}Binario oficial instalado.   ${N}"
     
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 100 --client-socket-sndbuf 0\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7200\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 1000 --max-connections-for-client 100 --client-socket-sndbuf 0\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7200.service
@@ -1259,17 +1201,17 @@ if [ -x /usr/bin/badvpn-udpgw ]; then
     if ss -tlnp | grep -qE ":7300\b"; then
         echo -e " ${V}¡BadVPN activado exitosamente en los puertos 7200 y 7300!   ${N}"
     else
-        echo -e " ${R}Fallo al encender el servicio. Revisa los permisos del sistema.   ${N}"
+        echo -e " ${R}Fallo al encender el servicio.   ${N}"
     fi
 else
-    echo -e "\n ${R}ERROR CRÍTICO: No se pudo compilar BadVPN. Verifica tu conexión a internet.   ${N}"
+    echo -e "\n ${R}ERROR CRÍTICO: No se pudo compilar BadVPN.   ${N}"
 fi
-read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")" ;;
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 2)
 systemctl stop badvpn7300 2>/dev/null
 systemctl stop badvpn7200 2>/dev/null
 killall badvpn-udpgw 2>/dev/null
-echo -e " ${A}BadVPN Detenido.   ${N}"; read -p " Enter..." ;;
+echo -e " ${A}BadVPN Detenido.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 3)
 systemctl stop badvpn7300 2>/dev/null
 systemctl stop badvpn7200 2>/dev/null
@@ -1279,7 +1221,7 @@ rm -f /etc/systemd/system/badvpn*.service /usr/bin/badvpn-udpgw
 apt-get purge badvpn -y >/dev/null 2>&1
 systemctl daemon-reload
 killall badvpn-udpgw 2>/dev/null
-echo -e " ${R}BadVPN Desinstalado por completo.   ${N}"; read -p " Enter..." ;;
+echo -e " ${R}BadVPN Desinstalado por completo.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 0) break ;;
 esac
 done
@@ -1301,7 +1243,7 @@ echo -e " ${V}[4]${N} ${W}👁️  Ver mis Datos y Link de Conexión   ${N}"
 echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar / Resetear Todo V2Ray   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver al Menú Principal   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_v2
+echo -ne " ${W}► Opcion : ${N}"; read op_v2
 case $op_v2 in
 1)
     clear
@@ -1311,8 +1253,12 @@ case $op_v2 in
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
     
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===   ${N}"
-    read -p "$(echo -e " ${W}► Puerto a usar (Recomendado: 443):   ${N}")" pt_v2; pt_v2=${pt_v2:-443}
-    read -p "$(echo -e " ${W}► Tu Dominio o SNI del Servidor (Ej: movistar.zex.digital):   ${N}")" dom_v2; dom_v2=${dom_v2:-$IP_VPS}
+    echo -e " ${W}► Puerto a usar (Recomendado: 443):${N}"
+    echo -ne " ${V}► ${N}"; read pt_v2; pt_v2=${pt_v2:-443}
+    
+    echo -e " ${W}► Tu Dominio o SNI (Ej: movistar.com):${N}"
+    echo -ne " ${V}► ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
+    
     UUID=$(uuidgen)
     
     systemctl stop xray apache2 nginx dropbear 2>/dev/null
@@ -1368,10 +1314,10 @@ EOF
     else
         echo -e "\n ${R}ERROR: V2Ray no pudo iniciar.   ${N}"
     fi
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")" ;;
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 2)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
-        echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; read -p " Enter..."; continue
+        echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
     fi
     UUID=$(uuidgen)
     sed -i -E "s/\"id\": \".*\"/\"id\": \"$UUID\"/" /usr/local/etc/xray/config.json
@@ -1379,17 +1325,18 @@ EOF
     systemctl restart xray
     echo -e " ${V}¡Nuevo UUID generado y configurado exitosamente!   ${N}"
     echo -e " ${W}Nuevo UUID:${N} $UUID"
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")" ;;
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 3)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
-        echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; read -p " Enter..."; continue
+        echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
     fi
     pt_actual=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
     echo -e "\n${C}=== MODIFICAR PUERTO V2RAY ===   ${N}"
     echo -e " ${W}🔹 Puerto actual:  ${N}${V}$pt_actual   ${N}"
-    read -p "$(echo -e " ${W}► Ingresa el NUEVO puerto a usar (Ej: 80, 443):   ${N}")" pt_nuevo
+    echo -e " ${W}► Ingresa el NUEVO puerto a usar (Ej: 80, 443):${N}"
+    echo -ne " ${V}► ${N}"; read pt_nuevo
     if [ -z "$pt_nuevo" ]; then
-        echo -e " ${R}Cancelado.   ${N}"; read -p " Enter..."; continue
+        echo -e " ${R}Cancelado.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
     fi
     
     systemctl stop xray 2>/dev/null
@@ -1408,10 +1355,10 @@ EOF
     else
         echo -e "\n ${R}ERROR: El puerto $pt_nuevo está bloqueado por el sistema. Intenta con otro.   ${N}"
     fi
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")" ;;
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 4)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
-        echo -e " ${R}V2Ray no está instalado.   ${N}"; read -p " Enter..."; continue
+        echo -e " ${R}V2Ray no está instalado.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
     fi
     dom_v2=$(cat /usr/local/etc/xray/dominio.txt | tr -d ' \n\r')
     pt_v2=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
@@ -1450,14 +1397,14 @@ EOF
     echo -e "${C}================================================${N}"
     echo -e " 🔗  ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):   ${N}\n"
     echo -e " ${A}$VMESS_LINK   ${N}\n"
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")" ;;
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 5)
     resetear_v2ray_completo
     systemctl disable xray >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove >/dev/null 2>&1
     rm -rf /usr/local/etc/xray
     echo -e " ${R}V2Ray / Xray Desinstalado y puertos liberados completamente.   ${N}"
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")" ;;
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 0) break ;;
 esac
 done
@@ -1485,7 +1432,7 @@ while true; do
     echo -e " ${C}[7]${N} ${W}👁️ Ver Errores del Servidor (Log Real)   ${N}"
     echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
     echo -e "${C}================================================${N}"
-    read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_hcr
+    echo -ne " ${W}► Opcion : ${N}"; read op_hcr
     
     case $op_hcr in
         1|2|3)
@@ -1504,7 +1451,7 @@ while true; do
             clear
             echo -e "${A}=== LOGS DEL MOTOR HCR ===   ${N}"
             journalctl -u hcr-server -n 40 --no-pager
-            read -p "$(echo -e " ${W}► Enter para regresar...   ${N}")"
+            echo -e "\n ${W}► Presiona Enter para regresar...${N}"; read
             ;;
         0) break ;;
     esac
@@ -1516,16 +1463,19 @@ instalar_hcr() {
     echo -e "${A}========= INSTALACION HCR SERVER =========   ${N}"
     mkdir -p /etc/hcr
     
-    read -p "$(echo -e " ${W}► Puerto de Inyección [Default 8080]:   ${N}")" p_inj
+    echo -e " ${W}► Puerto de Inyección [Default 8080]:${N}"
+    echo -ne " ${V}► ${N}"; read p_inj
     p_inj=${p_inj:-8080}
     
-    read -p "$(echo -e " ${W}► Puerto de redireccionamiento [Default 22]:   ${N}")" p_dest
+    echo -e " ${W}► Puerto de redireccionamiento [Default 22]:${N}"
+    echo -ne " ${V}► ${N}"; read p_dest
     p_dest=${p_dest:-22}
     
     echo -e "\n ${W}Seleccione Modo de transporte:   ${N}"
     echo -e " ${W}[1] Plain (Recomendado para HTTP Custom clásico)   ${N}"
     echo -e " ${W}[2] TLS (Con certificado SSL)   ${N}"
-    read -p "$(echo -e " ${W}► Opcion [Default 1]:   ${N}")" op_m
+    echo -e " ${W}► Opcion [Default 1]:${N}"
+    echo -ne " ${V}► ${N}"; read op_m
     op_m=${op_m:-1}
     
     if [ "$op_m" == "2" ]; then
@@ -1569,7 +1519,7 @@ instalar_hcr() {
     if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
         echo -e "\n ${R}[!] ERROR CRÍTICO DE RED [!]   ${N}"
         echo -e " ${A}Ningún servidor entregó el archivo válido.   ${N}"
-        read -p "$(echo -e " ${W}► Enter para regresar...   ${N}")"
+        echo -e "\n ${W}► Presiona Enter para regresar...${N}"; read
         return
     fi
     
@@ -1605,7 +1555,7 @@ EOF
     else
         echo -e "\n ${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.   ${N}"
     fi
-    read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 }
 
 menu_slowdns() {
@@ -1635,7 +1585,7 @@ while true; do
     echo -e " ${R}[4]${N} ${W}🗑️ Remover SlowDns   ${N}"
     echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
     echo -e "${C}------------------------------------------------${N}"
-    read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_dns
+    echo -ne " ${W}► Opcion : ${N}"; read op_dns
 
     case $op_dns in
         1) instalar_slowdns ;;
@@ -1650,11 +1600,12 @@ while true; do
             else
                 echo -e " ${R}Error al reiniciar el servicio.   ${N}"
             fi
-            read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+            echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
             ;;
         4)
             echo -e "${C}================================================${N}"
-            read -p "$(echo -e " ${W}► ¿Seguro de eliminar SlowDNS? (s/n):   ${N}")" confirmar
+            echo -e " ${W}► ¿Seguro de eliminar SlowDNS? (s/n):${N}"
+            echo -ne " ${V}► ${N}"; read confirmar
             if [[ "$confirmar" == "s" || "$confirmar" == "S" ]]; then
                 echo -e "\n ${R}Deteniendo y eliminando servicios...   ${N}"
                 systemctl stop slowdns > /dev/null 2>&1
@@ -1669,7 +1620,7 @@ while true; do
             else
                 echo -e "\n ${A}Operación cancelada.   ${N}"
             fi
-            read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+            echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
             ;;
         0) break ;;
         *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
@@ -1687,7 +1638,7 @@ instalar_slowdns() {
         if [ -s "/etc/slowdns/pub_key.txt" ]; then
             echo -e " ${R}[!] SlowDNS ya se encuentra instalado.   ${N}"
             echo -e " ${W}Usa la opción 4 para removerlo primero.   ${N}"
-            read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+            echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
             return
         else
             systemctl stop slowdns >/dev/null 2>&1
@@ -1695,15 +1646,17 @@ instalar_slowdns() {
         fi
     fi
 
-    read -p "$(echo -e " ${W}► Puerto local (Ej: 22):   ${N}")" puerto_local
+    echo -e " ${W}► Puerto local (Ej: 22):${N}"
+    echo -ne " ${V}► ${N}"; read puerto_local
     puerto_local=${puerto_local:-22}
 
     echo -e ""
-    read -p "$(echo -e " ${W}► Tu Dominio NS:   ${N}")" dominio_ns
+    echo -e " ${W}► Tu Dominio NS:${N}"
+    echo -ne " ${V}► ${N}"; read dominio_ns
 
     if [ -z "$dominio_ns" ]; then
         echo -e "\n ${R}[!] El dominio NS es obligatorio.   ${N}"
-        read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+        echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
         return
     fi
 
@@ -1751,7 +1704,7 @@ instalar_slowdns() {
     if [ ! -x "/etc/slowdns/dnstt-server" ]; then
         echo -e "\n ${R}[!] Error al obtener dnstt-server.   ${N}"
         rm -rf /etc/slowdns
-        read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+        echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
         return
     fi
 
@@ -1771,7 +1724,7 @@ instalar_slowdns() {
     if [ -z "$pub_key" ]; then
         echo -e "\n ${R}[!] Error al generar la llave pública.   ${N}"
         rm -rf /etc/slowdns
-        read -p "$(echo -e " ${W}► Enter para continuar...   ${N}")"
+        echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
         return
     fi
 
@@ -1819,7 +1772,7 @@ EOF
     echo -e " ${A}🔹 DOMINIO NS  :${N} ${W}$dominio_ns   ${N}"
     echo -e " ${A}🔹 PUBLIC KEY  :${N} ${V}$pub_key   ${N}"
     echo -e "${C}================================================${N}"
-    read -p "$(echo -e " ${W}► Presiona Enter para continuar...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 }
 
 info_slowdns() {
@@ -1840,7 +1793,7 @@ info_slowdns() {
         echo -e " ${A}🔹 PUBLIC KEY  :${N} ${V}$pub_key   ${N}"
     fi
     echo -e "${C}================================================${N}"
-    read -p "$(echo -e " ${W}► Presiona Enter para volver...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para volver...${N}"; read
 }
 
 configurar_banner() {
@@ -1851,7 +1804,8 @@ configurar_banner() {
     echo -e " ${V}Escribe el mensaje principal para tus clientes:   ${N}"
     echo -e " ${A}(Ej: SERVIDOR PREMIUM, PROHIBIDO TORRENT, etc.)   ${N}"
     echo ""
-    read -p "$(echo -e " ${W}► Mensaje:   ${N}")" texto_banner
+    echo -e " ${W}► Mensaje:${N}"
+    echo -ne " ${V}► ${N}"; read texto_banner
     
     if [ -z "$texto_banner" ]; then
         texto_banner="🚀 SERVIDOR PREMIUM ZERODAY 🚀"
@@ -1866,7 +1820,8 @@ configurar_banner() {
     echo -e " ${W}[3] Verde      [7] Fucsia   ${N}"
     echo -e " ${W}[4] Rojo       [8] Negro   ${N}"
     echo -e "${C}================================================${N}"
-    read -p "$(echo -e " ${W}► Opcion (1-8):   ${N}")" op_color
+    echo -e " ${W}► Opcion (1-8):${N}"
+    echo -ne " ${V}► ${N}"; read op_color
 
     case $op_color in
         1) c_html="blue" ;;
@@ -1896,8 +1851,7 @@ EOF
     echo ""
     echo -e " ${V}¡Banner configurado con éxito!   ${N}"
     echo -e " ${A}Ahora se mostrará tu mensaje en color en la app.   ${N}"
-    echo ""
-    read -p "$(echo -e " ${W}► Presiona Enter para regresar al menú...   ${N}")"
+    echo -e "\n ${W}► Presiona Enter para regresar al menú...${N}"; read
 }
 
 configurar_colores() {
@@ -1918,46 +1872,39 @@ configurar_colores() {
         echo -e " ${A}[8]${N} ${W}☢️ Tóxico Extremo      (Amarillo 226 y Verde 46)   ${N}"
         echo -e " ${C}[0]${N} ${W}↩️  Regresar al Menú Principal   ${N}"
         echo -e "${C}================================================${N}"
-        read -p "$(echo -e " ${W}► Elige un tema (1-8):   ${N}")" op_tema
+        echo -e " ${W}► Elige un tema (1-8):${N}"
+        echo -ne " ${V}► ${N}"; read op_tema
 
         case $op_tema in
-            1)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            1) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
 EOF
                 ;;
-            2)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            2) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;196m'; V='\033[38;5;226m'; A='\033[38;5;214m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;220m'; W='\033[38;5;231m'
 EOF
                 ;;
-            3)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            3) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;201m'; V='\033[38;5;51m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;198m'; W='\033[38;5;231m'
 EOF
                 ;;
-            4)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            4) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;46m'; V='\033[38;5;82m'; A='\033[38;5;118m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;48m'; W='\033[38;5;84m'
 EOF
                 ;;
-            5)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            5) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;33m'; V='\033[38;5;51m'; A='\033[38;5;39m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;45m'; W='\033[38;5;159m'
 EOF
                 ;;
-            6)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            6) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;214m'; V='\033[38;5;196m'; A='\033[38;5;226m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;202m'; W='\033[38;5;231m'
 EOF
                 ;;
-            7)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            7) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;93m'; V='\033[38;5;51m'; A='\033[38;5;141m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
 EOF
                 ;;
-            8)
-                cat << 'EOF' > /etc/zeroday_tema.conf
+            8) cat << 'EOF' > /etc/zeroday_tema.conf
 C='\033[38;5;226m'; V='\033[38;5;198m'; A='\033[38;5;46m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;214m'; W='\033[38;5;51m'
 EOF
                 ;;
@@ -1965,7 +1912,6 @@ EOF
             *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1; continue ;;
         esac
         
-        # Recargar configuración inmediatamente
         source /etc/zeroday_tema.conf
         echo -e "\n ${V}¡Tema Neón aplicado con éxito!   ${N}"
         sleep 1
@@ -2007,7 +1953,7 @@ echo -e " ${C}[33]${N} ${W}FIREWALL (IPTABLES)  ${C}[34]${N} ${W}Enable/Change P
 echo -e " ${C}[35]${N} ${W}AToken [APP's] ${R}[OFF]${N} ${C}[36]${N} ${W}BHTTP [APP's]  ${R}[OFF]  ${N}"
 echo -e " ${C}[37]${N} ${W}HCR [HTTP C.]  ${N}$PHCR ${C}[0]${N}  ${R}[ REGRESAR ]  ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
-read -p "$(echo -e " ${W}► Opcion :   ${N}")" op_inst
+echo -ne " ${W}► Opcion : ${N}"; read op_inst
 case $op_inst in
 4) menu_ssl ;;
 5) menu_ssr ;;
@@ -2016,15 +1962,15 @@ case $op_inst in
 14) menu_slowdns ;;
 19) menu_udp ;;
 20) menu_limpiador_puertos ;;
-21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo " Bloqueado   "; read -p " Enter..." ;;
+21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo " Bloqueado   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 22) menu_badvpn ;;
-24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo " Listo   "; read -p " Enter..." ;;
-26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; read -p " Enter..." ;;
-27) info_sistema; read -p "$(echo -e " ${W}Enter para continuar...   ${N}")" ;;
+24) apt install fail2ban -y >/dev/null 2>&1; systemctl enable fail2ban >/dev/null 2>&1; systemctl start fail2ban; echo " Listo   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+27) info_sistema; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 30) menu_zona_horaria ;;
-31) optimizar_sshd_estabilidad; systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; systemctl restart stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; read -p " Enter..." ;;
-33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; read -p " Enter..." ;;
-34) passwd root; read -p " Enter..." ;;
+31) optimizar_sshd_estabilidad; systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; systemctl restart stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+34) passwd root; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 37) menu_hcr ;;
 0) break ;;
 *) echo -e " ${R}Inválido   ${N}"; sleep 1 ;;
@@ -2046,10 +1992,10 @@ echo -e " ${A}[09]${N} ${W}⇨ 🧹 LIMPIADOR DE PUERTOS FANTASMAS (RESET)   ${N
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${V}[08]${N} ${W}⇨ [!] UPDATE / REMOVE   |  ${V}[0]${N} ${W}⇨ [ SALIR ]   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-read -p "$(echo -e " ${W}► Opcion :   ${N}")" opcion
+echo -ne " ${W}► Opcion : ${N}"; read opcion
 case $opcion in
 1|01) menu_usuarios ;;
-2|02) clear; optimizar_sshd_estabilidad; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; read -p "$(echo -e " ${W}Enter para continuar...   ${N}")" ;;
+2|02) clear; optimizar_sshd_estabilidad; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 3|03) ver_usuarios_online ;;
 4|04|5|05|8|08) menu_protocolos ;;
 6|06) configurar_banner ;;
