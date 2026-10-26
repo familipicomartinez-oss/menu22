@@ -3,16 +3,14 @@
 # ==========================================
 # CEREBRO DE COLORES EXTENDIDOS 256 (NEÓN PURO MÁXIMO)
 # ==========================================
-# Colores por defecto (Paleta 256: Cyan 51, Verde 46, Amarillo 226, Rojo 196)
 C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
 
-# Si el usuario ya eligió un tema antes, el script lo lee y aplica los colores
 if [ -f /etc/zeroday_tema.conf ]; then
     source /etc/zeroday_tema.conf
 fi
 
 # ==========================================
-# SINCRONIZACIÓN AUTOMÁTICA DE ZONA HORARIA (HORA DEL CELULAR)
+# SINCRONIZACIÓN AUTOMÁTICA DE ZONA HORARIA
 # ==========================================
 sincronizar_hora_celular() {
     local ZONA_DEFAULT="America/Bogota"
@@ -29,7 +27,7 @@ sincronizar_hora_celular() {
 sincronizar_hora_celular
 
 # ==========================================
-# BLINDAJE AUTOMÁTICO DE ESTABILIDAD SSHD Y RED (UBUNTU / DEBIAN)
+# BLINDAJE AUTOMÁTICO DE ESTABILIDAD SSHD Y RED
 # ==========================================
 optimizar_sshd_estabilidad() {
     if [ -f /etc/ssh/sshd_config ] && ! grep -q "^MaxStartups 100:30:200" /etc/ssh/sshd_config 2>/dev/null; then
@@ -58,7 +56,6 @@ liberar_puerto_fantasma() {
     local conservar=$2
     [ -z "$pt" ] && return
 
-    # 1. Matar cualquier proceso colgado en TCP/UDP en ese puerto
     fuser -k -9 "${pt}/tcp" >/dev/null 2>&1
     fuser -k -9 "${pt}/udp" >/dev/null 2>&1
     if command -v lsof >/dev/null 2>&1; then
@@ -68,12 +65,19 @@ liberar_puerto_fantasma() {
     local ss_pids=$(ss -lptn "sport = :$pt" 2>/dev/null | grep -oP 'pid=\K[0-9]+' | sort -u)
     [ -n "$ss_pids" ] && kill -9 $ss_pids >/dev/null 2>&1
 
-    # 2. Si otro protocolo tenía guardado ese mismo puerto en sus archivos, limpiarlo para que no vuelva a chocar
     if [ "$conservar" != "v2ray" ] && [ -f /usr/local/etc/xray/puerto.txt ]; then
         if [ "$(cat /usr/local/etc/xray/puerto.txt 2>/dev/null | tr -d ' \n\r')" == "$pt" ]; then
             systemctl stop xray >/dev/null 2>&1
             pkill -9 xray >/dev/null 2>&1
             rm -f /usr/local/etc/xray/puerto.txt
+        fi
+    fi
+    
+    if [ "$conservar" != "reality" ] && [ -f /etc/reality/puerto.txt ]; then
+        if [ "$(cat /etc/reality/puerto.txt 2>/dev/null | tr -d ' \n\r')" == "$pt" ]; then
+            systemctl stop xray-reality >/dev/null 2>&1
+            pkill -9 -f "xray run -c /etc/reality" >/dev/null 2>&1
+            rm -f /etc/reality/puerto.txt
         fi
     fi
 
@@ -124,7 +128,6 @@ liberar_puerto_fantasma() {
         fi
     fi
 
-    # Matar nuevamente por si algún servicio intentó revivir durante el cierre
     fuser -k -9 "${pt}/tcp" >/dev/null 2>&1
     lsof -ti :"$pt" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
     sleep 0.5
@@ -159,6 +162,21 @@ resetear_v2ray_completo() {
     rm -f /usr/local/etc/xray/puerto.txt /usr/local/etc/xray/config.json
     systemctl daemon-reload
     echo -e " ${V}✓ Puertos y rastros de V2Ray/Xray reseteados por completo.   ${N}"
+}
+
+resetear_reality_completo() {
+    echo -e " ${A}⏳ Reseteando VLESS+REALITY y liberando puertos...   ${N}"
+    if [ -f /etc/reality/puerto.txt ]; then
+        local p_r=$(cat /etc/reality/puerto.txt | tr -d ' \n\r')
+        fuser -k -9 "${p_r}/tcp" >/dev/null 2>&1
+        lsof -ti :"$p_r" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
+    fi
+    systemctl stop xray-reality >/dev/null 2>&1
+    systemctl disable xray-reality >/dev/null 2>&1
+    pkill -9 -f "xray run -c /etc/reality" >/dev/null 2>&1
+    rm -rf /etc/reality /etc/systemd/system/xray-reality.service
+    systemctl daemon-reload
+    echo -e " ${V}✓ Puertos y rastros de REALITY reseteados por completo.   ${N}"
 }
 
 resetear_python_completo() {
@@ -211,20 +229,21 @@ menu_limpiador_puertos() {
         echo -e "${C}================================================${N}"
         echo -e " ${W}Elimina rastros de puertos que quedaron bloqueados.${N}"
         echo -e "${C}────────────────────────────────────────────────────────${N}"
-        echo -e " ${V}[1]${N} ${W}🎯 Destrabar un Puerto Específico (Ej: 443, 80, 8080)   ${N}"
+        echo -e " ${V}[1]${N} ${W}🎯 Destrabar un Puerto Específico (Ej: 443, 80)   ${N}"
         echo -e " ${V}[2]${N} ${W}🔒 Resetear Puertos de SSL (Stunnel4)   ${N}"
         echo -e " ${V}[3]${N} ${W}🚀 Resetear Puertos de V2Ray / Xray   ${N}"
         echo -e " ${V}[4]${N} ${W}🐍 Resetear Puertos de Proxy Python   ${N}"
         echo -e " ${V}[5]${N} ${W}🛡️ Resetear Puertos de ShadowsocksR (SSR)   ${N}"
         echo -e " ${V}[6]${N} ${W}💉 Resetear Puertos de HCR Server   ${N}"
-        echo -e " ${R}[7]${N} ${W}🔥 RESETEAR TODOS LOS PUERTOS Y PROTOCOLOS (LIMPIEZA TOTAL)   ${N}"
+        echo -e " ${V}[7]${N} ${W}🌌 Resetear Puertos de VLESS+REALITY   ${N}"
+        echo -e " ${R}[8]${N} ${W}🔥 RESETEAR TODOS LOS PUERTOS Y PROTOCOLOS (TOTAL)   ${N}"
         echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
         echo -e "${C}================================================${N}"
         echo -ne " ${W}► Opcion : ${N}"; read op_clean
 
         case $op_clean in
             1)
-                echo -e "\n ${W}► Ingresa el puerto fantasma a limpiar (Ej: 443):${N}"
+                echo -e "\n ${W}► Ingresa el puerto fantasma a limpiar:${N}"
                 echo -ne " ${V}► ${N}"; read pt_clean
                 if [[ "$pt_clean" =~ ^[0-9]+$ ]] && [ "$pt_clean" != "22" ]; then
                     echo -e " ${A}⏳ Eliminando todo rastro del puerto $pt_clean...   ${N}"
@@ -233,43 +252,28 @@ menu_limpiador_puertos() {
                 else
                     echo -e " ${R}Puerto inválido o protegido (22).   ${N}"
                 fi
-                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
-                ;;
-            2)
-                resetear_ssl_completo
-                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
-                ;;
-            3)
-                resetear_v2ray_completo
-                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
-                ;;
-            4)
-                resetear_python_completo
-                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
-                ;;
-            5)
-                resetear_ssr_completo
-                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
-                ;;
-            6)
-                resetear_hcr_completo
-                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
-                ;;
-            7)
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+            2) resetear_ssl_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
+            3) resetear_v2ray_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
+            4) resetear_python_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
+            5) resetear_ssr_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
+            6) resetear_hcr_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
+            7) resetear_reality_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
+            8)
                 echo -e "\n ${R}⚠️ Ejecutando limpieza profunda de TODOS los puertos fantasmas...   ${N}"
                 resetear_ssl_completo
                 resetear_v2ray_completo
                 resetear_python_completo
                 resetear_ssr_completo
                 resetear_hcr_completo
+                resetear_reality_completo
                 for p_comun in 80 443 444 445 8080 8880 8443; do
                     fuser -k -9 "${p_comun}/tcp" >/dev/null 2>&1
                     lsof -ti :"$p_comun" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
                 done
                 systemctl restart ssh >/dev/null 2>&1 || systemctl restart sshd >/dev/null 2>&1
                 echo -e "\n ${V}¡LIMPIEZA TOTAL COMPLETADA! Todos los puertos están como nuevos.   ${N}"
-                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
-                ;;
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
             0) break ;;
             *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
         esac
@@ -361,6 +365,13 @@ if [ -f /usr/local/etc/xray/puerto.txt ]; then
     PT_V2=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
     if [ -n "$PT_V2" ] && ss -tlnp | grep -qE ":${PT_V2}\b"; then
         agregar_puerto "🔹 V2RAY: ${V}$PT_V2${N}"
+    fi
+fi
+
+if [ -f /etc/reality/puerto.txt ]; then
+    PT_REAL=$(cat /etc/reality/puerto.txt | tr -d ' \n\r')
+    if [ -n "$PT_REAL" ] && ss -tlnp | grep -qE ":${PT_REAL}\b"; then
+        agregar_puerto "🔹 REALITY: ${A}$PT_REAL${N}"
     fi
 fi
 
@@ -1410,6 +1421,197 @@ esac
 done
 }
 
+menu_reality() {
+while true; do
+    clear
+    ESTADO_R=$(systemctl is-active --quiet xray-reality && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
+    PT_R=$([ -f /etc/reality/puerto.txt ] && cat /etc/reality/puerto.txt || echo "NULL")
+    SNI_R=$([ -f /etc/reality/sni.txt ] && cat /etc/reality/sni.txt || echo "NULL")
+
+    echo -e "${C}================================================${N}"
+    echo -e "   ${A}🌌 VLESS + REALITY (ANTI-BLOQUEO DPI) 🌌   ${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " ${W}🔹 Puerto :${N} ${V}$PT_R${N}  ${W}| SNI :${N} ${A}$SNI_R${N}  ${W}| Estado :${N} $ESTADO_R"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -e " ${V}[1]${N} ${W}🟢 Instalar / Configurar VLESS + REALITY   ${N}"
+    echo -e " ${A}[2]${N} ${W}👁️ Ver Link de Conexión (Importar a App)   ${N}"
+    echo -e " ${C}[3]${N} ${W}⚙️ Cambiar SNI / Bug Host (En vivo)   ${N}"
+    echo -e " ${M}[4]${N} ${W}🔄 Generar Nuevo Usuario (UUID)   ${N}"
+    echo -e " ${R}[5]${N} ${W}🗑️ Desinstalar REALITY   ${N}"
+    echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -ne " ${W}► Opción : ${N}"; read op_r
+
+    case $op_r in
+        1)
+            clear
+            echo -e "${C}=== INSTALANDO VLESS + REALITY Aislafo ===${N}"
+            apt-get update -y >/dev/null 2>&1
+            apt-get install -y jq uuid-runtime curl openssl lsof psmisc >/dev/null 2>&1
+
+            if [ ! -f /usr/local/bin/xray ]; then
+                echo -e " ${V}⏳ Descargando motor Xray...${N}"
+                bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null 2>&1
+            fi
+
+            mkdir -p /etc/reality
+            echo -e "\n ${W}► Puerto a usar para REALITY (Recomendado: 444, 8443):${N}"
+            echo -ne " ${V}► ${N}"; read pt_r
+            pt_r=${pt_r:-444}
+
+            echo -e "\n ${W}► SNI de página permitida por tu operadora (Ej: www.microsoft.com):${N}"
+            echo -ne " ${V}► ${N}"; read sni_r
+            sni_r=${sni_r:-www.microsoft.com}
+
+            liberar_puerto_fantasma "$pt_r" "ninguno"
+
+            echo -e " ${A}⏳ Generando llaves criptográficas complejas...${N}"
+            UUID=$(uuidgen)
+            KEYS=$(/usr/local/bin/xray x25519)
+            PRIV_KEY=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
+            PUB_KEY=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
+            SHORT_ID=$(openssl rand -hex 8)
+
+            echo "$pt_r" > /etc/reality/puerto.txt
+            echo "$sni_r" > /etc/reality/sni.txt
+            echo "$UUID" > /etc/reality/uuid.txt
+            echo "$PRIV_KEY" > /etc/reality/priv.key
+            echo "$PUB_KEY" > /etc/reality/pub.key
+            echo "$SHORT_ID" > /etc/reality/short.id
+
+            cat <<EOF > /etc/reality/config.json
+{
+  "log": { "loglevel": "warning" },
+  "inbounds": [
+    {
+      "listen": "0.0.0.0",
+      "port": $pt_r,
+      "protocol": "vless",
+      "settings": {
+        "clients": [
+          {
+            "id": "$UUID",
+            "flow": "xtls-rprx-vision"
+          }
+        ],
+        "decryption": "none"
+      },
+      "streamSettings": {
+        "network": "tcp",
+        "security": "reality",
+        "realitySettings": {
+          "show": false,
+          "dest": "$sni_r:443",
+          "xver": 0,
+          "serverNames": [
+            "$sni_r"
+          ],
+          "privateKey": "$PRIV_KEY",
+          "shortIds": [
+            "$SHORT_ID"
+          ]
+        }
+      }
+    }
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ]
+}
+EOF
+            cat << 'EOF' > /etc/systemd/system/xray-reality.service
+[Unit]
+Description=Xray REALITY Service (ZeroDay)
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/xray run -c /etc/reality/config.json
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+            iptables -I INPUT -p tcp --dport $pt_r -j ACCEPT >/dev/null 2>&1
+            ufw allow $pt_r/tcp >/dev/null 2>&1
+
+            systemctl daemon-reload
+            systemctl enable xray-reality >/dev/null 2>&1
+            systemctl restart xray-reality
+
+            sleep 2
+            if systemctl is-active --quiet xray-reality && ss -tlnp | grep -qE ":${pt_r}\b"; then
+                echo -e "\n ${V}¡VLESS + REALITY Instalado y Activo en puerto $pt_r!   ${N}"
+            else
+                echo -e "\n ${R}ERROR: No pudo iniciar. Verifica que el puerto esté libre.   ${N}"
+            fi
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        2)
+            if [ ! -f /etc/reality/config.json ]; then
+                echo -e "\n ${R}REALITY no está instalado.${N}"
+                echo -e "\n ${W}► Presiona Enter...${N}"; read
+                continue
+            fi
+            PT=$(cat /etc/reality/puerto.txt | tr -d ' \n\r')
+            SNI=$(cat /etc/reality/sni.txt | tr -d ' \n\r')
+            UUID=$(cat /etc/reality/uuid.txt | tr -d ' \n\r')
+            PUB=$(cat /etc/reality/pub.key | tr -d ' \n\r')
+            SID=$(cat /etc/reality/short.id | tr -d ' \n\r')
+
+            LINK="vless://${UUID}@${IP_VPS}:${PT}?type=tcp&security=reality&pbk=${PUB}&fp=chrome&sni=${SNI}&sid=${SID}&spx=%2F&flow=xtls-rprx-vision#ZeroDay-REALITY"
+
+            clear
+            echo -e "${C}=== DATOS VLESS + REALITY ===${N}"
+            echo -e " ${W}🔹 IP Servidor : ${V}$IP_VPS${N}"
+            echo -e " ${W}🔹 Puerto      : ${V}$PT${N}"
+            echo -e " ${W}🔹 SNI Clón    : ${V}$SNI${N}"
+            echo -e " ${W}🔹 UUID        : ${A}$UUID${N}"
+            echo -e " ${W}🔹 Public Key  : ${A}$PUB${N}"
+            echo -e " ${W}🔹 Short ID    : ${A}$SID${N}"
+            echo -e "${C}================================================${N}"
+            echo -e " 🔗 ${V}LINK VLESS (Copiar a HTTP Custom, v2rayNG o NekoBox):${N}\n"
+            echo -e " ${A}$LINK${N}\n"
+            echo -e " ${W}► Presiona Enter...${N}"; read
+            ;;
+        3)
+            if [ ! -f /etc/reality/config.json ]; then return; fi
+            ACTUAL=$(cat /etc/reality/sni.txt | tr -d ' \n\r')
+            echo -e "\n ${W}► SNI Actual: ${V}$ACTUAL${N}"
+            echo -e " ${W}► Escribe el NUEVO SNI / Host:${N}"
+            echo -ne " ${V}► ${N}"; read nuevo_sni
+            [ -z "$nuevo_sni" ] && continue
+
+            sed -i "s/\"dest\": \".*:443\"/\"dest\": \"$nuevo_sni:443\"/" /etc/reality/config.json
+            sed -i "s/\"serverNames\": \[.*\]/\"serverNames\": [ \"$nuevo_sni\" ]/" /etc/reality/config.json
+            echo "$nuevo_sni" > /etc/reality/sni.txt
+            systemctl restart xray-reality
+            echo -e " ${V}¡SNI cambiado con éxito a $nuevo_sni!${N}"
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        4)
+            if [ ! -f /etc/reality/config.json ]; then return; fi
+            UUID=$(uuidgen)
+            sed -i -E "s/\"id\": \".*\"/\"id\": \"$UUID\"/" /etc/reality/config.json
+            echo "$UUID" > /etc/reality/uuid.txt
+            systemctl restart xray-reality
+            echo -e " ${V}¡Nuevo UUID generado: $UUID!${N}"
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        5)
+            resetear_reality_completo
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        0) break ;;
+    esac
+done
+}
+
 menu_hcr() {
 while true; do
     clear
@@ -1927,6 +2129,7 @@ PV2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R
 PHCR=$(es hcr-server)
 PDNS=$(es slowdns)
 PSSR=$(es ssr-server)
+PREAL=$(es xray-reality)
 
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script ZeroDay ) 🍄   ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
@@ -1936,7 +2139,7 @@ echo -e " ${C}[3]${N} ${W}OPENVPN       ${R}[OFF]${N}   ${C}[13]${N} ${W}WEBMIN 
 echo -e " ${C}[4]${N} ${W}SSL/TLS       ${N}$PSSL    ${C}[14]${N} ${W}SLOWDNS        ${N}$PDNS  ${N}"
 echo -e " ${C}[5]${N} ${W}SHADOWSOCKS-R ${N}$PSSR    ${C}[15]${N} ${W}SSL->PYTHON    ${R}[OFF]  ${N}"
 echo -e " ${C}[6]${N} ${W}SQUID         ${R}[OFF]${N}   ${C}[16]${N} ${W}SSLH MULTIPLEX ${R}[OFF]  ${N}"
-echo -e " ${C}[7]${N} ${W}PROXY PYTHON  ${N}$PPY    ${C}[17]${N} ${W}OVER WEBSOCKET ${A}(#BETA)  ${N}"
+echo -e " ${C}[7]${N} ${W}PROXY PYTHON  ${N}$PPY    ${C}[17]${N} ${W}VLESS REALITY  ${N}$PREAL  "
 echo -e " ${C}[8]${N} ${W}V2RAY MANAGER ${N}$PV2    ${C}[18]${N} ${W}SOCKS5         ${A}(#BETA)  ${N}"
 echo -e " ${C}[9]${N} ${W}CFA ( CLASH ) ${R}[OFF]${N}   ${C}[19]${N} ${W}Protocolos UDP ${N}$PUDP  "
 echo -e " ${C}[10]${N} ${W}TROJAN-GO     ${R}[OFF]${N}   ${C}[20]${N} ${A}🧹 LIMPIADOR PUERTOS  ${N}"
@@ -1960,6 +2163,7 @@ case $op_inst in
 7) menu_py ;;
 8) menu_v2ray ;;
 14) menu_slowdns ;;
+17) menu_reality ;;
 19) menu_udp ;;
 20) menu_limpiador_puertos ;;
 21) iptables -A FORWARD -m string --string "BitTorrent" --algo bm -j DROP; echo " Bloqueado   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
@@ -1968,8 +2172,8 @@ case $op_inst in
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 27) info_sistema; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 30) menu_zona_horaria ;;
-31) optimizar_sshd_estabilidad; systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; systemctl restart stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server >/dev/null 2>&1; echo " Reiniciado   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
-33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+31) optimizar_sshd_estabilidad; systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; systemctl restart stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server xray-reality >/dev/null 2>&1; echo " Reiniciado   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 34) passwd root; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 37) menu_hcr ;;
 0) break ;;
@@ -1995,7 +2199,7 @@ echo -e "${C}──────────────────────�
 echo -ne " ${W}► Opcion : ${N}"; read opcion
 case $opcion in
 1|01) menu_usuarios ;;
-2|02) clear; optimizar_sshd_estabilidad; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 8080/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+2|02) clear; optimizar_sshd_estabilidad; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 3|03) ver_usuarios_online ;;
 4|04|5|05|8|08) menu_protocolos ;;
 6|06) configurar_banner ;;
