@@ -229,7 +229,7 @@ menu_limpiador_puertos() {
         echo -e "${C}================================================${N}"
         echo -e " ${W}Elimina rastros de puertos que quedaron bloqueados.${N}"
         echo -e "${C}────────────────────────────────────────────────────────${N}"
-        echo -e " ${V}[1]${N} ${W}🎯 Destrabar un Puerto Específico (Ej: 443, 80)   ${N}"
+        echo -e " ${V}[1]${N} ${W}🎯 Destrabar un Puerto Específico (Ej: 443, 80, 8080)   ${N}"
         echo -e " ${V}[2]${N} ${W}🔒 Resetear Puertos de SSL (Stunnel4)   ${N}"
         echo -e " ${V}[3]${N} ${W}🚀 Resetear Puertos de V2Ray / Xray   ${N}"
         echo -e " ${V}[4]${N} ${W}🐍 Resetear Puertos de Proxy Python   ${N}"
@@ -1445,7 +1445,7 @@ while true; do
     case $op_r in
         1)
             clear
-            echo -e "${C}=== INSTALANDO VLESS + REALITY Aislafo ===${N}"
+            echo -e "${C}=== INSTALANDO VLESS + REALITY Aislado ===${N}"
             apt-get update -y >/dev/null 2>&1
             apt-get install -y jq uuid-runtime curl openssl lsof psmisc >/dev/null 2>&1
 
@@ -1468,8 +1468,8 @@ while true; do
             echo -e " ${A}⏳ Generando llaves criptográficas complejas...${N}"
             UUID=$(uuidgen)
             KEYS=$(/usr/local/bin/xray x25519)
-            PRIV_KEY=$(echo "$KEYS" | grep "Private key" | awk '{print $3}')
-            PUB_KEY=$(echo "$KEYS" | grep "Public key" | awk '{print $3}')
+            PRIV_KEY=$(echo "$KEYS" | grep -i "Private" | awk '{print $NF}' | tr -d ' \n\r')
+            PUB_KEY=$(echo "$KEYS" | grep -i "Public" | awk '{print $NF}' | tr -d ' \n\r')
             SHORT_ID=$(openssl rand -hex 8)
 
             echo "$pt_r" > /etc/reality/puerto.txt
