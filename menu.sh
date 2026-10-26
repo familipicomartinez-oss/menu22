@@ -10,6 +10,19 @@ if [ -f /etc/zeroday_tema.conf ]; then
 fi
 
 # ==========================================
+# AUTO-MANTENIMIENTO DE DISCO (EVITA DISCO AL 99.8%)
+# ==========================================
+limpiar_basura_disco() {
+    local uso_disco=$(df / 2>/dev/null | awk 'NR==2 {gsub("%",""); print $5}')
+    if [[ "$uso_disco" =~ ^[0-9]+$ ]] && [ "$uso_disco" -gt 85 ]; then
+        journalctl --vacuum-size=10M >/dev/null 2>&1
+        apt-get clean >/dev/null 2>&1
+        rm -rf /tmp/* /var/log/*.gz /var/log/*.[0-9] >/dev/null 2>&1
+    fi
+}
+limpiar_basura_disco
+
+# ==========================================
 # SINCRONIZACIÓN AUTOMÁTICA DE ZONA HORARIA
 # ==========================================
 sincronizar_hora_celular() {
@@ -72,7 +85,7 @@ liberar_puerto_fantasma() {
             rm -f /usr/local/etc/xray/puerto.txt
         fi
     fi
-    
+
     if [ "$conservar" != "reality" ] && [ -f /etc/reality/puerto.txt ]; then
         if [ "$(cat /etc/reality/puerto.txt 2>/dev/null | tr -d ' \n\r')" == "$pt" ]; then
             systemctl stop xray-reality >/dev/null 2>&1
@@ -85,15 +98,7 @@ liberar_puerto_fantasma() {
         if grep -qE "^accept[[:space:]]*=[[:space:]]*$pt$" /etc/stunnel/stunnel.conf 2>/dev/null; then
             systemctl stop stunnel4 >/dev/null 2>&1
             pkill -9 stunnel4 >/dev/null 2>&1
-            awk -v p="$pt" '
-            BEGIN { RS=""; FS="\n" }
-            {
-                keep=1
-                for(i=1; i<=NF; i++) {
-                    if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0
-                }
-                if (keep) print $0 "\n"
-            }' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
+            awk -v p="$pt" 'BEGIN { RS=""; FS="\n" } { keep=1; for(i=1; i<=NF; i++) { if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0 } if (keep) print $0 "\n" }' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
             mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
             if grep -q '^accept' /etc/stunnel/stunnel.conf 2>/dev/null; then
                 systemctl start stunnel4 >/dev/null 2>&1
@@ -267,7 +272,7 @@ menu_limpiador_puertos() {
                 resetear_ssr_completo
                 resetear_hcr_completo
                 resetear_reality_completo
-                for p_comun in 80 443 444 445 8080 8880 8443; do
+                for p_comun in 80 442 443 444 445 8080 8880 8443; do
                     fuser -k -9 "${p_comun}/tcp" >/dev/null 2>&1
                     lsof -ti :"$p_comun" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
                 done
@@ -306,9 +311,9 @@ menu_zona_horaria() {
             3) TZ_SEL="America/Caracas" ;;
             4) TZ_SEL="America/Argentina/Buenos_Aires" ;;
             5) TZ_SEL="America/New_York" ;;
-            6) 
+            6)
                 echo -e " ${W}► Escribe tu Zona (Ej: America/Bogota):${N}"
-                echo -ne " ${V}► ${N}"; read TZ_SEL 
+                echo -ne " ${V}► ${N}"; read TZ_SEL
                 ;;
             0) break ;;
             *) continue ;;
@@ -415,7 +420,7 @@ fi
 echo -e "${C}=========>>>>> 🌿 Script ZeroDay 🌿 <<<<<=========   ${N}"
 echo -e " ${V}$IP_VPS  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${W}🔹 S.O:  ${N}${V}$S_OS${N}  ${W}🔹 Base:  ${N}${V}$S_ARCH${N}  ${W}🔹 CPU's:  ${N}${V}$S_CPU  ${N}"
+echo -e " ${W}🔹 S.O:  ${N}${V}$S_OS${N}  ${W}🔹 Base:  ${N}${V}$S_ARCH${N}  ${W}🔹 CPU:  ${N}${V}$S_CPU  ${N}"
 echo -e " ${W}🔹 IP:  ${N}${V}$IP_VPS${N}  ${W}🔹 FECHA:  ${N}${A}$FECHA_ACT  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V5.9)  ${N}"
@@ -435,9 +440,9 @@ ver_usuarios_online() {
     echo -e "${C}================================================${N}"
     echo -e " ${W}Escaneando conexiones y límites en tiempo real...  ${N}"
     echo -e "${C}────────────────────────────────────────────────────────${N}"
-    
+
     USERS=$(awk -F: '$3 >= 1000 && $1 != "nobody" {print $1}' /etc/passwd)
-    
+
     if [ -z "$USERS" ]; then
         echo -e " ${R}No hay usuarios creados en el sistema.  ${N}"
     else
@@ -447,9 +452,9 @@ ver_usuarios_online() {
             else
                 limite="?"
             fi
-            
+
             conex=$(ps -u "$user" -o comm= 2>/dev/null | grep -c "^sshd$")
-            
+
             if [ "$conex" -gt 0 ]; then
                 INFO_CON=$(who | grep "^$user " | head -n 1)
                 if [ -n "$INFO_CON" ]; then
@@ -569,15 +574,15 @@ echo -e " ${R}  usuario si supera el límite de $l conexiones.   ${N}"
 echo -e "${C}================================================${N}"
 echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 ;;
-2) 
+2)
     echo -e " ${W}👤 Usuario a eliminar:${N}"
     echo -ne " ${V}► ${N}"; read u
     pkill -u "$u" 2>/dev/null; userdel -r -f "$u" 2>/dev/null && rm -f /etc/vps_limites/$u && echo -e " ${V}Eliminado.   ${N}" || echo -e " ${R}Error.   ${N}"
-    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read 
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 ;;
-3) 
+3)
     awk -F: '$3 >= 1000 && $1 != "nobody" {print " -> " $1}' /etc/passwd
-    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read 
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 ;;
 4) ver_usuarios_online ;;
 0) break ;;
@@ -667,7 +672,7 @@ else
     echo -e " ${R}ERROR: Stunnel4 no pudo iniciar en el puerto $p2. Detalles del sistema:   ${N}"
     journalctl -u stunnel4.service -n 5 --no-pager
 fi
-echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read 
+echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 ;;
 2)
 if [ ! -f /etc/stunnel/stunnel.conf ]; then
@@ -685,15 +690,7 @@ if [ -z "$p_ext" ]; then
 fi
 systemctl stop stunnel4 >/dev/null 2>&1
 pkill -9 stunnel4 >/dev/null 2>&1
-awk -v p="$p_ext" '
-BEGIN { RS=""; FS="\n" }
-{
-    keep=1
-    for(i=1; i<=NF; i++) {
-        if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0
-    }
-    if (keep) print $0 "\n"
-}' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
+awk -v p="$p_ext" 'BEGIN { RS=""; FS="\n" } { keep=1; for(i=1; i<=NF; i++) { if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0 } if (keep) print $0 "\n" }' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
 mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
 
 liberar_puerto_fantasma "$p_ext" "ssl"
@@ -738,16 +735,7 @@ fi
 if grep -qE "^accept[[:space:]]*=[[:space:]]*$p_del$" /etc/stunnel/stunnel.conf; then
     systemctl stop stunnel4 >/dev/null 2>&1
     pkill -9 stunnel4 >/dev/null 2>&1
-    awk -v p="$p_del" '
-    BEGIN { RS=""; FS="\n" }
-    {
-        keep=1
-        for(i=1; i<=NF; i++) {
-            if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0
-        }
-        if (keep) print $0 "\n"
-    }
-    ' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
+    awk -v p="$p_del" 'BEGIN { RS=""; FS="\n" } { keep=1; for(i=1; i<=NF; i++) { if ($i ~ "^accept[ \t]*=[ \t]*" p "$") keep=0 } if (keep) print $0 "\n" }' /etc/stunnel/stunnel.conf > /etc/stunnel/stunnel.conf.tmp
     mv -f /etc/stunnel/stunnel.conf.tmp /etc/stunnel/stunnel.conf
 
     fuser -k -9 "${p_del}/tcp" >/dev/null 2>&1
@@ -1198,16 +1186,16 @@ fi
 
 if [ -x /usr/bin/badvpn-udpgw ]; then
     echo -e " ${V}Binario oficial instalado.   ${N}"
-    
+
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7300\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7300 --max-clients 1000 --max-connections-for-client 100 --client-socket-sndbuf 0\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7300.service
     echo -e "[Unit]\nDescription=BadVPN UDPGW 7200\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/badvpn-udpgw --listen-addr 127.0.0.1:7200 --max-clients 1000 --max-connections-for-client 100 --client-socket-sndbuf 0\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/badvpn7200.service
-    
+
     systemctl daemon-reload
     systemctl enable badvpn7300 >/dev/null 2>&1
     systemctl enable badvpn7200 >/dev/null 2>&1
     systemctl restart badvpn7300 >/dev/null 2>&1
     systemctl restart badvpn7200 >/dev/null 2>&1
-    
+
     sleep 2
     if ss -tlnp | grep -qE ":7300\b"; then
         echo -e " ${V}¡BadVPN activado exitosamente en los puertos 7200 y 7300!   ${N}"
@@ -1262,24 +1250,24 @@ case $op_v2 in
     apt-get update -y >/dev/null 2>&1
     apt-get install -y jq uuid-runtime curl psmisc lsof openssl >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
-    
+
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===   ${N}"
     echo -e " ${W}► Puerto a usar (Recomendado: 443):${N}"
     echo -ne " ${V}► ${N}"; read pt_v2; pt_v2=${pt_v2:-443}
-    
+
     echo -e " ${W}► Tu Dominio o SNI (Ej: movistar.com):${N}"
     echo -ne " ${V}► ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
-    
+
     UUID=$(uuidgen)
-    
+
     systemctl stop xray apache2 nginx dropbear 2>/dev/null
     liberar_puerto_fantasma "$pt_v2" "v2ray"
     sleep 1
-    
+
     mkdir -p /usr/local/etc/xray
     openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=$dom_v2" >/dev/null 2>&1
     chmod 644 /usr/local/etc/xray/private.key /usr/local/etc/xray/cert.crt
-    
+
     cat <<EOF > /usr/local/etc/xray/config.json
 {
   "log": { "loglevel": "warning" },
@@ -1312,13 +1300,13 @@ EOF
     echo "$dom_v2" > /usr/local/etc/xray/dominio.txt
     echo "$pt_v2" > /usr/local/etc/xray/puerto.txt
     echo "$UUID" > /usr/local/etc/xray/uuid.txt
-    
+
     iptables -I INPUT -p tcp --dport $pt_v2 -j ACCEPT >/dev/null 2>&1
     ufw allow $pt_v2/tcp >/dev/null 2>&1
     systemctl daemon-reload
     systemctl restart xray
     systemctl enable xray >/dev/null 2>&1
-    
+
     sleep 2
     if systemctl is-active --quiet xray && ss -tlnp | grep -qE ":${pt_v2}\b"; then
         echo -e "\n ${V}¡V2Ray Instalado y Activo con TLS en puerto $pt_v2!   ${N}"
@@ -1349,17 +1337,17 @@ EOF
     if [ -z "$pt_nuevo" ]; then
         echo -e " ${R}Cancelado.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
     fi
-    
+
     systemctl stop xray 2>/dev/null
     fuser -k -9 "${pt_actual}/tcp" >/dev/null 2>&1
     liberar_puerto_fantasma "$pt_nuevo" "v2ray"
-    
+
     sed -i -E "s/\"port\": [0-9]+/\"port\": $pt_nuevo/" /usr/local/etc/xray/config.json
     echo "$pt_nuevo" > /usr/local/etc/xray/puerto.txt
     iptables -I INPUT -p tcp --dport $pt_nuevo -j ACCEPT >/dev/null 2>&1
     ufw allow $pt_nuevo/tcp >/dev/null 2>&1
     systemctl restart xray
-    
+
     sleep 2
     if systemctl is-active --quiet xray && ss -tlnp | grep -qE ":${pt_nuevo}\b"; then
         echo -e "\n ${V}¡Puerto modificado exitosamente al $pt_nuevo!   ${N}"
@@ -1374,7 +1362,7 @@ EOF
     dom_v2=$(cat /usr/local/etc/xray/dominio.txt | tr -d ' \n\r')
     pt_v2=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
     UUID=$(cat /usr/local/etc/xray/uuid.txt | tr -d ' \n\r')
-    
+
     cat <<EOF > /tmp/vmess.json
 {
   "v": "2",
@@ -1395,7 +1383,7 @@ EOF
 EOF
     VMESS_BASE64=$(cat /tmp/vmess.json | base64 -w 0)
     VMESS_LINK="vmess://$VMESS_BASE64"
-    
+
     clear
     echo -e "${C}=== TUS DATOS DE V2RAY ===   ${N}"
     echo -e " ${W}🔹 IP Servidor    :  ${N}${V}$IP_VPS   ${N}"
@@ -1445,12 +1433,13 @@ while true; do
     case $op_r in
         1)
             clear
-            echo -e "${C}=== INSTALANDO VLESS + REALITY Aislado ===${N}"
+            echo -e "${C}=== INSTALANDO VLESS + REALITY AISLADO ===${N}"
+            limpiar_basura_disco
             apt-get update -y >/dev/null 2>&1
             apt-get install -y jq uuid-runtime curl openssl lsof psmisc >/dev/null 2>&1
 
             if [ ! -f /usr/local/bin/xray ]; then
-                echo -e " ${V}⏳ Descargando motor Xray...${N}"
+                echo -e " ${V}⏳ Descargando motor Xray oficial...${N}"
                 bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null 2>&1
             fi
 
@@ -1463,13 +1452,13 @@ while true; do
             echo -ne " ${V}► ${N}"; read sni_r
             sni_r=${sni_r:-www.microsoft.com}
 
-            liberar_puerto_fantasma "$pt_r" "ninguno"
+            liberar_puerto_fantasma "$pt_r" "reality"
 
-            echo -e " ${A}⏳ Generando llaves criptográficas complejas...${N}"
-            UUID=$(uuidgen)
-            KEYS=$(/usr/local/bin/xray x25519)
-            PRIV_KEY=$(echo "$KEYS" | grep -i "Private" | awk '{print $NF}' | tr -d ' \n\r')
-            PUB_KEY=$(echo "$KEYS" | grep -i "Public" | awk '{print $NF}' | tr -d ' \n\r')
+            echo -e " ${A}⏳ Generando llaves criptográficas X25519...${N}"
+            UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
+            KEYS=$(/usr/local/bin/xray x25519 2>/dev/null)
+            PRIV_KEY=$(echo "$KEYS" | sed -n '1p' | awk -F':' '{print $2}' | tr -d ' \n\r')
+            PUB_KEY=$(echo "$KEYS" | sed -n '2p' | awk -F':' '{print $2}' | tr -d ' \n\r')
             SHORT_ID=$(openssl rand -hex 8)
 
             echo "$pt_r" > /etc/reality/puerto.txt
@@ -1503,13 +1492,9 @@ while true; do
           "show": false,
           "dest": "$sni_r:443",
           "xver": 0,
-          "serverNames": [
-            "$sni_r"
-          ],
+          "serverNames": ["$sni_r"],
           "privateKey": "$PRIV_KEY",
-          "shortIds": [
-            "$SHORT_ID"
-          ]
+          "shortIds": ["$SHORT_ID"]
         }
       }
     }
@@ -1548,7 +1533,7 @@ EOF
             if systemctl is-active --quiet xray-reality && ss -tlnp | grep -qE ":${pt_r}\b"; then
                 echo -e "\n ${V}¡VLESS + REALITY Instalado y Activo en puerto $pt_r!   ${N}"
             else
-                echo -e "\n ${R}ERROR: No pudo iniciar. Verifica que el puerto esté libre.   ${N}"
+                echo -e "\n ${R}ERROR: No pudo iniciar. Revisa que el SNI tenga puerto 443 válido.   ${N}"
             fi
             echo -e "\n ${W}► Presiona Enter...${N}"; read
             ;;
@@ -1580,7 +1565,7 @@ EOF
             echo -e " ${W}► Presiona Enter...${N}"; read
             ;;
         3)
-            if [ ! -f /etc/reality/config.json ]; then return; fi
+            if [ ! -f /etc/reality/config.json ]; then continue; fi
             ACTUAL=$(cat /etc/reality/sni.txt | tr -d ' \n\r')
             echo -e "\n ${W}► SNI Actual: ${V}$ACTUAL${N}"
             echo -e " ${W}► Escribe el NUEVO SNI / Host:${N}"
@@ -1588,15 +1573,15 @@ EOF
             [ -z "$nuevo_sni" ] && continue
 
             sed -i "s/\"dest\": \".*:443\"/\"dest\": \"$nuevo_sni:443\"/" /etc/reality/config.json
-            sed -i "s/\"serverNames\": \[.*\]/\"serverNames\": [ \"$nuevo_sni\" ]/" /etc/reality/config.json
+            sed -i "s/\"serverNames\": \[.*\]/\"serverNames\": [\"$nuevo_sni\"]/" /etc/reality/config.json
             echo "$nuevo_sni" > /etc/reality/sni.txt
             systemctl restart xray-reality
             echo -e " ${V}¡SNI cambiado con éxito a $nuevo_sni!${N}"
             echo -e "\n ${W}► Presiona Enter...${N}"; read
             ;;
         4)
-            if [ ! -f /etc/reality/config.json ]; then return; fi
-            UUID=$(uuidgen)
+            if [ ! -f /etc/reality/config.json ]; then continue; fi
+            UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
             sed -i -E "s/\"id\": \".*\"/\"id\": \"$UUID\"/" /etc/reality/config.json
             echo "$UUID" > /etc/reality/uuid.txt
             systemctl restart xray-reality
@@ -1616,7 +1601,7 @@ menu_hcr() {
 while true; do
     clear
     ESTADO=$(systemctl is-active --quiet hcr-server && echo -e "${V}Activo${N}" || echo -e "${R}Inactivo${N}")
-    
+
     if [ -f /etc/hcr/config ]; then
         source /etc/hcr/config
     else
@@ -1635,7 +1620,7 @@ while true; do
     echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
     echo -e "${C}================================================${N}"
     echo -ne " ${W}► Opcion : ${N}"; read op_hcr
-    
+
     case $op_hcr in
         1|2|3)
             echo -e " ${W}Para cambiar puertos o modos, usa la Opción 5 de Instalación.   ${N}"
@@ -1664,22 +1649,22 @@ instalar_hcr() {
     clear
     echo -e "${A}========= INSTALACION HCR SERVER =========   ${N}"
     mkdir -p /etc/hcr
-    
+
     echo -e " ${W}► Puerto de Inyección [Default 8080]:${N}"
     echo -ne " ${V}► ${N}"; read p_inj
     p_inj=${p_inj:-8080}
-    
+
     echo -e " ${W}► Puerto de redireccionamiento [Default 22]:${N}"
     echo -ne " ${V}► ${N}"; read p_dest
     p_dest=${p_dest:-22}
-    
+
     echo -e "\n ${W}Seleccione Modo de transporte:   ${N}"
     echo -e " ${W}[1] Plain (Recomendado para HTTP Custom clásico)   ${N}"
     echo -e " ${W}[2] TLS (Con certificado SSL)   ${N}"
     echo -e " ${W}► Opcion [Default 1]:${N}"
     echo -ne " ${V}► ${N}"; read op_m
     op_m=${op_m:-1}
-    
+
     if [ "$op_m" == "2" ]; then
         MODO="TLS"
         echo -e "\n ${A}Generando certificado TLS...   ${N}"
@@ -1690,26 +1675,26 @@ instalar_hcr() {
     else
         MODO="Plain"
     fi
-    
+
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
     echo -e " ${C}Descargando Binario HCR Original...   ${N}"
     rm -f /etc/hcr/hcr-server
     apt-get update -y >/dev/null 2>&1
     apt-get install curl wget lsof coreutils psmisc -y >/dev/null 2>&1
-    
+
     MIRRORS=(
     "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/hcr-server"
 )
-    
+
     DESCARGA_EXITOSA=0
     for url in "${MIRRORS[@]}"; do
         echo -e " ${W}► Probando fuente: ${url:8:35}...   ${N}"
         curl -4 -sL --connect-timeout 10 "$url" -o /etc/hcr/hcr-server
-        
+
         TAMANO=$(wc -c < /etc/hcr/hcr-server 2>/dev/null || echo 0)
         echo -e "   ${W}-> Tamaño obtenido: $TAMANO bytes   ${N}"
-        
+
         if [ "$TAMANO" -gt 1000000 ]; then
             echo -e " ${V}¡Archivo binario original descargado correctamente!   ${N}"
             DESCARGA_EXITOSA=1
@@ -1717,14 +1702,14 @@ instalar_hcr() {
         fi
         rm -f /etc/hcr/hcr-server
     done
-    
+
     if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
         echo -e "\n ${R}[!] ERROR CRÍTICO DE RED [!]   ${N}"
         echo -e " ${A}Ningún servidor entregó el archivo válido.   ${N}"
         echo -e "\n ${W}► Presiona Enter para regresar...${N}"; read
         return
     fi
-    
+
     chmod 777 /etc/hcr/hcr-server
 
     cat << 'EOF' > /etc/hcr/start.sh
@@ -1741,16 +1726,16 @@ EOF
     chmod +x /etc/hcr/start.sh
 
     echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
-    
+
     liberar_puerto_fantasma "$p_inj" "hcr"
-    
+
     systemctl daemon-reload
     systemctl enable hcr-server >/dev/null 2>&1
     systemctl restart hcr-server
-    
+
     iptables -I INPUT -p tcp --dport $p_inj -j ACCEPT >/dev/null 2>&1
     ufw allow $p_inj/tcp >/dev/null 2>&1
-    
+
     sleep 3
     if ss -tlnp | grep -qE ":${p_inj}\b"; then
         echo -e "\n ${V}¡ÉXITO! El motor HCR encendió y el puerto $p_inj está verificado como ABIERTO.   ${N}"
@@ -1835,7 +1820,7 @@ instalar_slowdns() {
     echo -e "${C}================================================${N}"
     echo -e "       ${A}⚙️ INSTALACIÓN DE SLOWDNS ⚙️   ${N}"
     echo -e "${C}================================================${N}"
-    
+
     if [ -d "/etc/slowdns" ]; then
         if [ -s "/etc/slowdns/pub_key.txt" ]; then
             echo -e " ${R}[!] SlowDNS ya se encuentra instalado.   ${N}"
@@ -1982,7 +1967,7 @@ info_slowdns() {
     echo -e "${C}================================================${N}"
     echo -e "       ${A}ℹ️ INFORMACIÓN SLOWDNS ℹ️   ${N}"
     echo -e "${C}================================================${N}"
-    
+
     if [ ! -s "/etc/slowdns/pub_key.txt" ]; then
         echo -e " ${R}[!] SlowDNS no está instalado.   ${N}"
     else
@@ -2008,7 +1993,7 @@ configurar_banner() {
     echo ""
     echo -e " ${W}► Mensaje:${N}"
     echo -ne " ${V}► ${N}"; read texto_banner
-    
+
     if [ -z "$texto_banner" ]; then
         texto_banner="🚀 SERVIDOR PREMIUM ZERODAY 🚀"
     fi
@@ -2032,7 +2017,7 @@ configurar_banner() {
         4) c_html="red" ;;
         5) c_html="gray" ;;
         6) c_html="orange" ;;
-        7) c_html="magenta" ;; 
+        7) c_html="magenta" ;;
         8) c_html="black" ;;
         *) c_html="white" ;;
     esac
@@ -2078,42 +2063,18 @@ configurar_colores() {
         echo -ne " ${V}► ${N}"; read op_tema
 
         case $op_tema in
-            1) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
-EOF
-                ;;
-            2) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;196m'; V='\033[38;5;226m'; A='\033[38;5;214m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;220m'; W='\033[38;5;231m'
-EOF
-                ;;
-            3) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;201m'; V='\033[38;5;51m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;198m'; W='\033[38;5;231m'
-EOF
-                ;;
-            4) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;46m'; V='\033[38;5;82m'; A='\033[38;5;118m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;48m'; W='\033[38;5;84m'
-EOF
-                ;;
-            5) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;33m'; V='\033[38;5;51m'; A='\033[38;5;39m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;45m'; W='\033[38;5;159m'
-EOF
-                ;;
-            6) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;214m'; V='\033[38;5;196m'; A='\033[38;5;226m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;202m'; W='\033[38;5;231m'
-EOF
-                ;;
-            7) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;93m'; V='\033[38;5;51m'; A='\033[38;5;141m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'
-EOF
-                ;;
-            8) cat << 'EOF' > /etc/zeroday_tema.conf
-C='\033[38;5;226m'; V='\033[38;5;198m'; A='\033[38;5;46m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;214m'; W='\033[38;5;51m'
-EOF
-                ;;
+            1) echo "C='\033[38;5;51m'; V='\033[38;5;46m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'" > /etc/zeroday_tema.conf ;;
+            2) echo "C='\033[38;5;196m'; V='\033[38;5;226m'; A='\033[38;5;214m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;220m'; W='\033[38;5;231m'" > /etc/zeroday_tema.conf ;;
+            3) echo "C='\033[38;5;201m'; V='\033[38;5;51m'; A='\033[38;5;226m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;198m'; W='\033[38;5;231m'" > /etc/zeroday_tema.conf ;;
+            4) echo "C='\033[38;5;46m'; V='\033[38;5;82m'; A='\033[38;5;118m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;48m'; W='\033[38;5;84m'" > /etc/zeroday_tema.conf ;;
+            5) echo "C='\033[38;5;33m'; V='\033[38;5;51m'; A='\033[38;5;39m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;45m'; W='\033[38;5;159m'" > /etc/zeroday_tema.conf ;;
+            6) echo "C='\033[38;5;214m'; V='\033[38;5;196m'; A='\033[38;5;226m'; R='\033[38;5;160m'; N='\033[0m'; M='\033[38;5;202m'; W='\033[38;5;231m'" > /etc/zeroday_tema.conf ;;
+            7) echo "C='\033[38;5;93m'; V='\033[38;5;51m'; A='\033[38;5;141m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;201m'; W='\033[38;5;231m'" > /etc/zeroday_tema.conf ;;
+            8) echo "C='\033[38;5;226m'; V='\033[38;5;198m'; A='\033[38;5;46m'; R='\033[38;5;196m'; N='\033[0m'; M='\033[38;5;214m'; W='\033[38;5;51m'" > /etc/zeroday_tema.conf ;;
             0) break ;;
             *) echo -e " ${R}Opción inválida.  ${N}"; sleep 1; continue ;;
         esac
-        
+
         source /etc/zeroday_tema.conf
         echo -e "\n ${V}¡Tema Neón aplicado con éxito!   ${N}"
         sleep 1
@@ -2153,7 +2114,7 @@ echo -e " ${C}[27]${N} ${W}DETALLES DEL VPS     ${C}[28]${N} ${W}BLOCK ADS      
 echo -e " ${C}[29]${N} ${W}DNS CUSTOM (NETFLIX) ${C}[30]${N} ${W}ZONA HORARIA (RELOJ)  ${N}"
 echo -e " ${C}[31]${N} ${W}REINICIAR SERVICIOS  ${C}[32]${N} ${W}Brook Server   ${R}[OFF]  ${N}"
 echo -e " ${C}[33]${N} ${W}FIREWALL (IPTABLES)  ${C}[34]${N} ${W}Enable/Change PASSWD ROOT  ${N}"
-echo -e " ${C}[35]${N} ${W}AToken [APP's] ${R}[OFF]${N} ${C}[36]${N} ${W}BHTTP [APP's]  ${R}[OFF]  ${N}"
+echo -e " ${C}[35]${N} ${W}AToken [APPs]  ${R}[OFF]${N} ${C}[36]${N} ${W}BHTTP [APPs]   ${R}[OFF]  ${N}"
 echo -e " ${C}[37]${N} ${W}HCR [HTTP C.]  ${N}$PHCR ${C}[0]${N}  ${R}[ REGRESAR ]  ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
 echo -ne " ${W}► Opcion : ${N}"; read op_inst
@@ -2199,7 +2160,7 @@ echo -e "${C}──────────────────────�
 echo -ne " ${W}► Opcion : ${N}"; read opcion
 case $opcion in
 1|01) menu_usuarios ;;
-2|02) clear; optimizar_sshd_estabilidad; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+2|02) clear; optimizar_sshd_estabilidad; limpiar_basura_disco; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 3|03) ver_usuarios_online ;;
 4|04|5|05|8|08) menu_protocolos ;;
 6|06) configurar_banner ;;
