@@ -1004,6 +1004,156 @@ while true; do
 done
 }
 
+menu_ssl_python() {
+    while true; do
+        clear
+        ESTADO_SP=$(systemctl is-active --quiet stunnel4 && grep -q "stunnel-python" /etc/stunnel/stunnel.conf 2>/dev/null && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
+        echo -e "${C}================================================${N}"
+        echo -e "   ${A}🔗 SSL Encadenado a PYTHON (WEBSOCKET) 🔗   ${N}"
+        echo -e "${C}================================================${N}"
+        echo -e " ${W}Estado:${N} $ESTADO_SP"
+        echo -e "${C}------------------------------------------------${N}"
+        echo -e " ${V}[1]${N} ${W}🟢 Instalar y Configurar (SSL -> Python -> SSH)   ${N}"
+        echo -e " ${A}[2]${N} ${W}👁️ Ver Configuración para HTTP Custom   ${N}"
+        echo -e " ${R}[3]${N} ${W}🗑️ Desinstalar / Limpiar Puertos   ${N}"
+        echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
+        echo -e "${C}------------------------------------------------${N}"
+        echo -ne " ${W}► Opción : ${N}"; read op_sp
+
+        case $op_sp in
+            1)
+                clear
+                echo -e "${C}=== INSTALACIÓN DE SSL -> PYTHON ===${N}"
+                echo -e " ${W}► Puerto Externo SSL (El que pones en la app, Ej: 443):${N}"
+                echo -ne " ${V}► ${N}"; read p_ext
+                p_ext=${p_ext:-443}
+
+                echo -e " ${W}► Puerto Interno Python (Oculto, Ej: 80):${N}"
+                echo -ne " ${V}► ${N}"; read p_int
+                p_int=${p_int:-80}
+
+                echo -e " ${A}⏳ Limpiando puertos fantasmas y preparando instalación...${N}"
+                liberar_puerto_fantasma "$p_ext" "ninguno"
+                liberar_puerto_fantasma "$p_int" "ninguno"
+
+                apt-get update -y >/dev/null 2>&1
+                apt-get install python3 stunnel4 openssl lsof psmisc -y >/dev/null 2>&1
+                
+                cat << 'EOF_PY' > /etc/proxy.py
+import socket, threading
+def f(x, y):
+    try:
+        while True:
+            a = x.recv(8192)
+            if not a: break
+            y.sendall(a)
+    except: pass
+    finally:
+        try: x.close()
+        except: pass
+        try: y.close()
+        except: pass
+
+def c(s):
+    d = None
+    try:
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        s.settimeout(15)
+        s.recv(4096)
+        s.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n")
+        d = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        d.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        d.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        d.settimeout(15)
+        d.connect(('127.0.0.1', 22))
+        s.settimeout(None)
+        d.settimeout(None)
+        threading.Thread(target=f, args=(s, d), daemon=True).start()
+        threading.Thread(target=f, args=(d, s), daemon=True).start()
+    except:
+        try: s.close()
+        except: pass
+        if d:
+            try: d.close()
+            except: pass
+
+sv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+sv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+sv.bind(('0.0.0.0', PUERTO_AQUI))
+sv.listen(500)
+while True:
+    try:
+        cl, a = sv.accept()
+        threading.Thread(target=c, args=(cl,), daemon=True).start()
+    except: pass
+EOF_PY
+                sed -i "s/PUERTO_AQUI/$p_int/g" /etc/proxy.py
+                echo -e "[Unit]\nDescription=Proxy Python WS\nAfter=network.target\n[Service]\nType=simple\nExecStart=/usr/bin/python3 /etc/proxy.py\nRestart=always\nRestartSec=2\nLimitNOFILE=65535\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/proxypy.service
+
+                mkdir -p /etc/stunnel
+                rm -f /var/run/stunnel4.pid
+                openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 -keyout /etc/stunnel/stunnel.pem -out /etc/stunnel/stunnel.pem -subj "/CN=ZeroDay/O=VPN/C=CO" >/dev/null 2>&1
+                chmod 600 /etc/stunnel/stunnel.pem
+
+                cat <<EOF > /etc/stunnel/stunnel.conf
+pid = /var/run/stunnel4.pid
+cert = /etc/stunnel/stunnel.pem
+client = no
+socket = a:SO_REUSEADDR=1
+socket = l:TCP_NODELAY=1
+socket = r:TCP_NODELAY=1
+socket = l:SO_KEEPALIVE=1
+socket = r:SO_KEEPALIVE=1
+TIMEOUTidle = 86400
+TIMEOUTclose = 0
+TIMEOUTconnect = 300
+
+[stunnel-python]
+accept = $p_ext
+connect = 127.0.0.1:$p_int
+EOF
+
+                sed -i 's/ENABLED=0/ENABLED=1/g' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" > /etc/default/stunnel4
+
+                systemctl daemon-reload
+                systemctl enable proxypy >/dev/null 2>&1
+                systemctl restart proxypy
+                systemctl enable stunnel4 >/dev/null 2>&1
+                systemctl restart stunnel4
+
+                iptables -I INPUT -p tcp --dport $p_ext -j ACCEPT >/dev/null 2>&1
+                ufw allow $p_ext/tcp >/dev/null 2>&1
+
+                echo -e "\n ${V}¡Módulo SSL->PYTHON Instalado y Activo en el puerto externo $p_ext!   ${N}"
+                echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
+                ;;
+            2)
+                clear
+                echo -e "${C}=== CÓMO CONFIGURAR HTTP CUSTOM ===${N}"
+                echo -e " ${W}1. En la pantalla de inicio, marca estas 2 casillas:${N}"
+                echo -e "    ☑️ ${V}Payload${N}"
+                echo -e "    ☑️ ${V}SSL (SNI)${N}"
+                echo -e "\n ${W}2. En la cajita de Payload, pega exactamente esto:${N}"
+                echo -e " ${A}GET / HTTP/1.1[crlf]Host: [host][crlf]Upgrade: websocket[crlf][crlf]${N}"
+                echo -e "\n ${W}3. En la cajita de SNI:${N}"
+                echo -e " ${A}Pon la página permitida (Ej: prepago.movistar.co)${N}"
+                echo -e "\n ${W}4. Puerto y Servidor:${N}"
+                echo -e " ${A}Pon tu IP y el puerto externo SSL (Ej: ${IP_VPS}:443)${N}"
+                echo -e "\n ${W}5. Pon los datos del usuario SSH que hayas creado y dale a Connect.${N}"
+                echo -e "\n ${W}► Presiona Enter para regresar...${N}"; read
+                ;;
+            3)
+                resetear_python_completo
+                resetear_ssl_completo
+                echo -e "\n ${W}► Presiona Enter...${N}"; read
+                ;;
+            0) break ;;
+            *) echo -e " ${R}Opción inválida.${N}"; sleep 1 ;;
+        esac
+    done
+}
+
 menu_py() {
 while true; do
 clear
@@ -1258,43 +1408,57 @@ case $op_v2 in
     echo -e " ${W}► Tu Dominio o SNI (Ej: movistar.com):${N}"
     echo -ne " ${V}► ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
 
-    UUID=$(uuidgen)
+    UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
 
-    systemctl stop xray apache2 nginx dropbear 2>/dev/null
+    systemctl stop xray apache2 nginx dropbear stunnel4 2>/dev/null
     liberar_puerto_fantasma "$pt_v2" "v2ray"
     sleep 1
 
     mkdir -p /usr/local/etc/xray
-    openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=$dom_v2" >/dev/null 2>&1
+    openssl req -newkey rsa:2048 -nodes -keyout /usr/local/etc/xray/private.key -x509 -days 3650 -out /usr/local/etc/xray/cert.crt -subj "/CN=$dom_v2" >/dev/null 2>&1
     chmod 644 /usr/local/etc/xray/private.key /usr/local/etc/xray/cert.crt
 
     cat <<EOF > /usr/local/etc/xray/config.json
 {
-  "log": { "loglevel": "warning" },
-  "inbounds": [{
-    "port": $pt_v2,
-    "listen": "0.0.0.0",
-    "protocol": "vmess",
-    "settings": {
-      "clients": [ { "id": "$UUID", "alterId": 0 } ]
-    },
-    "streamSettings": {
-      "network": "ws",
-      "security": "tls",
-      "tlsSettings": {
-        "allowInsecure": true,
-        "certificates": [
+  "log": {
+    "loglevel": "warning"
+  },
+  "inbounds": [
+    {
+      "port": $pt_v2,
+      "listen": "0.0.0.0",
+      "protocol": "vmess",
+      "settings": {
+        "clients": [
           {
-            "certificateFile": "/usr/local/etc/xray/cert.crt",
-            "keyFile": "/usr/local/etc/xray/private.key"
+            "id": "$UUID",
+            "alterId": 0
           }
         ]
       },
-      "wsSettings": { "path": "/zeroday" },
-      "sockopt": { "tcpKeepAliveInterval": 30, "tcpNoDelay": true }
+      "streamSettings": {
+        "network": "ws",
+        "security": "tls",
+        "tlsSettings": {
+          "certificates": [
+            {
+              "certificateFile": "/usr/local/etc/xray/cert.crt",
+              "keyFile": "/usr/local/etc/xray/private.key"
+            }
+          ]
+        },
+        "wsSettings": {
+          "path": "/zeroday"
+        }
+      }
     }
-  }],
-  "outbounds": [{ "protocol": "freedom", "settings": {} }]
+  ],
+  "outbounds": [
+    {
+      "protocol": "freedom",
+      "settings": {}
+    }
+  ]
 }
 EOF
     echo "$dom_v2" > /usr/local/etc/xray/dominio.txt
@@ -1304,21 +1468,22 @@ EOF
     iptables -I INPUT -p tcp --dport $pt_v2 -j ACCEPT >/dev/null 2>&1
     ufw allow $pt_v2/tcp >/dev/null 2>&1
     systemctl daemon-reload
-    systemctl restart xray
     systemctl enable xray >/dev/null 2>&1
+    systemctl restart xray
 
     sleep 2
     if systemctl is-active --quiet xray && ss -tlnp | grep -qE ":${pt_v2}\b"; then
         echo -e "\n ${V}¡V2Ray Instalado y Activo con TLS en puerto $pt_v2!   ${N}"
     else
-        echo -e "\n ${R}ERROR: V2Ray no pudo iniciar.   ${N}"
+        echo -e "\n ${R}ERROR: V2Ray no pudo iniciar. Detalles de SystemD:   ${N}"
+        journalctl -u xray.service -n 5 --no-pager
     fi
     echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 2)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
     fi
-    UUID=$(uuidgen)
+    UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
     sed -i -E "s/\"id\": \".*\"/\"id\": \"$UUID\"/" /usr/local/etc/xray/config.json
     echo "$UUID" > /usr/local/etc/xray/uuid.txt
     systemctl restart xray
@@ -1392,7 +1557,7 @@ EOF
     echo -e " ${W}🔹 UUID           :  ${N}${A}$UUID   ${N}"
     echo -e " ${W}🔹 Protocolo      : WebSocket (WS)   ${N}"
     echo -e " ${W}🔹 Path           : /zeroday   ${N}"
-    echo -e " ${W}🔹 Seguridad      : TLS (AllowInsecure)   ${N}"
+    echo -e " ${W}🔹 Seguridad      : TLS   ${N}"
     echo -e "${C}================================================${N}"
     echo -e " 🔗  ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):   ${N}\n"
     echo -e " ${A}$VMESS_LINK   ${N}\n"
@@ -2091,6 +2256,7 @@ PHCR=$(es hcr-server)
 PDNS=$(es slowdns)
 PSSR=$(es ssr-server)
 PREAL=$(es xray-reality)
+P15=$(systemctl is-active --quiet stunnel4 && grep -q "stunnel-python" /etc/stunnel/stunnel.conf 2>/dev/null && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
 
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script ZeroDay ) 🍄   ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
@@ -2098,7 +2264,7 @@ echo -e " ${C}[1]${N} ${W}OpenSSH       ${N}$P22    ${C}[11]${N} ${W}PSIPHON SER
 echo -e " ${C}[2]${N} ${W}DROPBEAR      ${R}[OFF]${N}   ${C}[12]${N} ${W}TCP DNS        ${A}(#BETA)  ${N}"
 echo -e " ${C}[3]${N} ${W}OPENVPN       ${R}[OFF]${N}   ${C}[13]${N} ${W}WEBMIN         ${R}[OFF]  ${N}"
 echo -e " ${C}[4]${N} ${W}SSL/TLS       ${N}$PSSL    ${C}[14]${N} ${W}SLOWDNS        ${N}$PDNS  ${N}"
-echo -e " ${C}[5]${N} ${W}SHADOWSOCKS-R ${N}$PSSR    ${C}[15]${N} ${W}SSL->PYTHON    ${R}[OFF]  ${N}"
+echo -e " ${C}[5]${N} ${W}SHADOWSOCKS-R ${N}$PSSR    ${C}[15]${N} ${W}SSL->PYTHON    ${N}$P15  ${N}"
 echo -e " ${C}[6]${N} ${W}SQUID         ${R}[OFF]${N}   ${C}[16]${N} ${W}SSLH MULTIPLEX ${R}[OFF]  ${N}"
 echo -e " ${C}[7]${N} ${W}PROXY PYTHON  ${N}$PPY    ${C}[17]${N} ${W}VLESS REALITY  ${N}$PREAL  "
 echo -e " ${C}[8]${N} ${W}V2RAY MANAGER ${N}$PV2    ${C}[18]${N} ${W}SOCKS5         ${A}(#BETA)  ${N}"
@@ -2124,6 +2290,7 @@ case $op_inst in
 7) menu_py ;;
 8) menu_v2ray ;;
 14) menu_slowdns ;;
+15) menu_ssl_python ;;
 17) menu_reality ;;
 19) menu_udp ;;
 20) menu_limpiador_puertos ;;
