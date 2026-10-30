@@ -128,8 +128,18 @@ liberar_puerto_fantasma() {
         source /etc/hcr/config 2>/dev/null
         if [ "$P_INJ" == "$pt" ]; then
             systemctl stop hcr-server >/dev/null 2>&1
-            pkill -9 hcr-server >/dev/null 2>&1
+            pkill -9 -f "hcr_server.conf" >/dev/null 2>&1
+            pkill -9 -f "hcr_plain.py" >/dev/null 2>&1
             rm -f /etc/hcr/config
+        fi
+    fi
+
+    if [ "$conservar" != "bhttp" ] && [ -f /etc/bhttp/config ]; then
+        source /etc/bhttp/config 2>/dev/null
+        if [ "$BHTTP_PORT" == "$pt" ]; then
+            systemctl stop bhttp-server >/dev/null 2>&1
+            pkill -9 -f "/etc/bhttp/bhttp_proxy.py" >/dev/null 2>&1
+            rm -f /etc/bhttp/config
         fi
     fi
 
@@ -199,6 +209,20 @@ resetear_python_completo() {
     echo -e " ${V}✓ Puertos y rastros de Proxy Python reseteados por completo.   ${N}"
 }
 
+resetear_bhttp_completo() {
+    echo -e " ${A}⏳ Reseteando BHTTP Server y liberando puertos...   ${N}"
+    if [ -f /etc/bhttp/config ]; then
+        source /etc/bhttp/config 2>/dev/null
+        [ -n "$BHTTP_PORT" ] && fuser -k -9 "${BHTTP_PORT}/tcp" >/dev/null 2>&1
+    fi
+    systemctl stop bhttp-server >/dev/null 2>&1
+    systemctl disable bhttp-server >/dev/null 2>&1
+    pkill -9 -f "/etc/bhttp/bhttp_proxy.py" >/dev/null 2>&1
+    rm -rf /etc/bhttp /etc/systemd/system/bhttp-server.service
+    systemctl daemon-reload
+    echo -e " ${V}✓ Puertos y rastros de BHTTP Server reseteados por completo.   ${N}"
+}
+
 resetear_ssr_completo() {
     echo -e " ${A}⏳ Reseteando ShadowsocksR y liberando puertos...   ${N}"
     if [ -f /etc/ssr/puerto.txt ]; then
@@ -220,7 +244,9 @@ resetear_hcr_completo() {
         [ -n "$P_INJ" ] && fuser -k -9 "${P_INJ}/tcp" >/dev/null 2>&1
     fi
     systemctl stop hcr-server >/dev/null 2>&1
-    pkill -9 hcr-server >/dev/null 2>&1
+    systemctl disable hcr-server >/dev/null 2>&1
+    pkill -9 -f "hcr_server.conf" >/dev/null 2>&1
+    pkill -9 -f "hcr_plain.py" >/dev/null 2>&1
     rm -rf /etc/hcr /etc/systemd/system/hcr-server.service
     systemctl daemon-reload
     echo -e " ${V}✓ Puertos y rastros de HCR Server reseteados por completo.   ${N}"
@@ -241,7 +267,8 @@ menu_limpiador_puertos() {
         echo -e " ${V}[5]${N} ${W}🛡️ Resetear Puertos de ShadowsocksR (SSR)   ${N}"
         echo -e " ${V}[6]${N} ${W}💉 Resetear Puertos de HCR Server   ${N}"
         echo -e " ${V}[7]${N} ${W}🌌 Resetear Puertos de VLESS+REALITY   ${N}"
-        echo -e " ${R}[8]${N} ${W}🔥 RESETEAR TODOS LOS PUERTOS Y PROTOCOLOS (TOTAL)   ${N}"
+        echo -e " ${V}[8]${N} ${W}⚡ Resetear Puertos de BHTTP Server   ${N}"
+        echo -e " ${R}[9]${N} ${W}🔥 RESETEAR TODOS LOS PUERTOS Y PROTOCOLOS (TOTAL)   ${N}"
         echo -e " ${C}[0]${N} ${W}↩️  Volver   ${N}"
         echo -e "${C}================================================${N}"
         echo -ne " ${W}► Opcion : ${N}"; read op_clean
@@ -264,7 +291,8 @@ menu_limpiador_puertos() {
             5) resetear_ssr_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
             6) resetear_hcr_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
             7) resetear_reality_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
-            8)
+            8) resetear_bhttp_completo; echo -e "\n ${W}► Presiona Enter...${N}"; read ;;
+            9)
                 echo -e "\n ${R}⚠️ Ejecutando limpieza profunda de TODOS los puertos fantasmas...   ${N}"
                 resetear_ssl_completo
                 resetear_v2ray_completo
@@ -272,7 +300,8 @@ menu_limpiador_puertos() {
                 resetear_ssr_completo
                 resetear_hcr_completo
                 resetear_reality_completo
-                for p_comun in 80 442 443 444 445 8080 8880 8443; do
+                resetear_bhttp_completo
+                for p_comun in 80 442 443 444 445 8080 8880 8888 8443; do
                     fuser -k -9 "${p_comun}/tcp" >/dev/null 2>&1
                     lsof -ti :"$p_comun" 2>/dev/null | xargs -r kill -9 >/dev/null 2>&1
                 done
@@ -394,6 +423,13 @@ if [ -f /etc/proxy.py ]; then
     fi
 fi
 
+if [ -f /etc/bhttp/config ]; then
+    source /etc/bhttp/config 2>/dev/null
+    if [ -n "$BHTTP_PORT" ] && ss -tlnp | grep -qE ":${BHTTP_PORT}\b"; then
+        agregar_puerto "🔹 BHTTP: ${V}$BHTTP_PORT${N}"
+    fi
+fi
+
 if [ -f /etc/stunnel/stunnel.conf ]; then
     for p_ssl in $(grep '^accept' /etc/stunnel/stunnel.conf | awk -F'=' '{print $NF}' | awk -F':' '{print $NF}' | tr -d ' \n\r'); do
         if [ -n "$p_ssl" ] && ss -tlnp | grep -qE ":${p_ssl}\b"; then
@@ -408,7 +444,7 @@ ss -tlnp | grep -qE ":7300\b" && agregar_puerto "🔹 BadVPN: ${V}7300${N}"
 ss -tlnp | grep -qE ":7200\b" && agregar_puerto "🔹 BadVPN: ${V}7200${N}"
 
 if [ -f /etc/hcr/config ]; then
-    source /etc/hcr/config
+    source /etc/hcr/config 2>/dev/null
     if [ -n "$P_INJ" ] && ss -tlnp | grep -qE ":${P_INJ}\b"; then
         agregar_puerto "🔹 HCR: ${V}$P_INJ${N}"
     else
@@ -423,7 +459,7 @@ echo -e "${C}──────────────────────�
 echo -e " ${W}🔹 S.O:  ${N}${V}$S_OS${N}  ${W}🔹 Base:  ${N}${V}$S_ARCH${N}  ${W}🔹 CPU:  ${N}${V}$S_CPU  ${N}"
 echo -e " ${W}🔹 IP:  ${N}${V}$IP_VPS${N}  ${W}🔹 FECHA:  ${N}${A}$FECHA_ACT  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V6.0)  ${N}"
+echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V6.3)  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${M}🟢 PUERTOS ACTIVOS:   ${N}"
 echo -e " $STR_PORTS"
@@ -1884,47 +1920,304 @@ EOF
 done
 }
 
-menu_hcr() {
+# ==========================================
+# MÓDULO 36: BHTTP SERVER (WEBSOCKET RÁPIDO PARA APPS)
+# ==========================================
+menu_bhttp() {
 while true; do
     clear
-    ESTADO=$(systemctl is-active --quiet hcr-server && echo -e "${V}Activo${N}" || echo -e "${R}Inactivo${N}")
-
-    if [ -f /etc/hcr/config ]; then
-        source /etc/hcr/config
+    ESTADO_BHTTP=$(systemctl is-active --quiet bhttp-server && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
+    if [ -f /etc/bhttp/config ]; then
+        source /etc/bhttp/config 2>/dev/null
     else
-        P_INJ="8080"
-        P_DEST="22"
-        MODO="Plain"
+        BHTTP_PORT="8080"
+        BHTTP_DEST="22"
     fi
 
     echo -e "${C}================================================${N}"
-    echo -e "       ${W}MENU HCR SERVER - Estado:${N} $ESTADO"
+    echo -e "       ${A}⚡ BHTTP SERVER [APPs] - FAST WS ⚡   ${N}"
     echo -e "${C}================================================${N}"
-    echo -e " ${V}[1]${N} ${W}⚙️ Puerto Inyección [$P_INJ]   ${N}${V}[2]${N} ${W}⚙️ Puerto Destino [$P_DEST]   ${N}"
-    echo -e " ${V}[3]${N} ${W}🛡️ Modo             [$MODO]   ${N}"
-    echo -e " ${A}[5]${N} ${W}🟢 Iniciar / Configurar   ${N}    ${R}[6]${N} ${W}🗑️ Desinstalar HCR   ${N}"
-    echo -e " ${C}[7]${N} ${W}👁️ Ver Errores del Servidor (Log Real)   ${N}"
-    echo -e " ${C}[0]${N} ${W}↩️ REGRESAR   ${N}"
+    echo -e " ${W}🔹 Puerto Inyección :${N} ${V}$BHTTP_PORT${N}  ${W}| Destino :${N} ${A}$BHTTP_DEST${N}  ${W}| Estado :${N} $ESTADO_BHTTP"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -e " ${V}[1]${N} ${W}🟢 Instalar / Configurar BHTTP Server   ${N}"
+    echo -e " ${A}[2]${N} ${W}👁️ Ver Configuración y Payloads para APPs   ${N}"
+    echo -e " ${C}[3]${N} ${W}⚙️ Cambiar Puerto de Inyección   ${N}"
+    echo -e " ${V}[4]${N} ${W}▶️ Reiniciar BHTTP Server   ${N}"
+    echo -e " ${A}[5]${N} ${W}⏸️ Detener BHTTP Server   ${N}"
+    echo -e " ${C}[6]${N} ${W}📜 Ver Registro de Conexiones (Logs en Vivo)   ${N}"
+    echo -e " ${R}[7]${N} ${W}🗑️ Desinstalar BHTTP Server   ${N}"
+    echo -e " ${C}[0]${N} ${W}↩️ REGRESAR AL MENÚ   ${N}"
+    echo -e "${C}------------------------------------------------${N}"
+    echo -ne " ${W}► Opción : ${N}"; read op_bh
+
+    case $op_bh in
+        1)
+            clear
+            echo -e "${C}=== INSTALACIÓN BHTTP SERVER (SOCKET ACELERADO) ===${N}"
+            echo -e " ${W}► Puerto de Inyección para las Apps [Default 8080]:${N}"
+            echo -ne " ${V}► ${N}"; read p_bh
+            p_bh=${p_bh:-8080}
+
+            echo -e " ${W}► Puerto Local de Redirección (SSH) [Default 22]:${N}"
+            echo -ne " ${V}► ${N}"; read p_dest
+            p_dest=${p_dest:-22}
+
+            echo -e " ${A}⏳ Limpiando puertos y compilando entorno BHTTP...${N}"
+            liberar_puerto_fantasma "$p_bh" "bhttp"
+
+            apt-get update -y >/dev/null 2>&1
+            apt-get install -y python3 lsof psmisc >/dev/null 2>&1
+
+            mkdir -p /etc/bhttp
+            cat << 'EOF_BH' > /etc/bhttp/bhttp_proxy.py
+import socket
+import threading
+import sys
+
+LISTEN_PORT = PUERTO_ESCUCHA
+TARGET_PORT = PUERTO_SSH
+BUFSIZE = 65536
+
+def transfer(src, dst):
+    try:
+        while True:
+            data = src.recv(BUFSIZE)
+            if not data:
+                break
+            dst.sendall(data)
+    except:
+        pass
+    finally:
+        try: src.close()
+        except: pass
+        try: dst.close()
+        except: pass
+
+def handle_client(client_sock):
+    target_sock = None
+    try:
+        client_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        client_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        client_sock.settimeout(15)
+
+        req = client_sock.recv(4096)
+        if not req:
+            client_sock.close()
+            return
+
+        resp = b"HTTP/1.1 101 Switching Protocols\r\nContent-Length: 0\r\nUpgrade: websocket\r\nConnection: Upgrade\r\n\r\n"
+        client_sock.sendall(resp)
+
+        target_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        target_sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        target_sock.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        target_sock.settimeout(15)
+        target_sock.connect(('127.0.0.1', TARGET_PORT))
+
+        client_sock.settimeout(None)
+        target_sock.settimeout(None)
+
+        t1 = threading.Thread(target=transfer, args=(client_sock, target_sock), daemon=True)
+        t2 = threading.Thread(target=transfer, args=(target_sock, client_sock), daemon=True)
+        t1.start()
+        t2.start()
+    except:
+        try: client_sock.close()
+        except: pass
+        if target_sock:
+            try: target_sock.close()
+            except: pass
+
+def main():
+    server = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    server.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    server.bind(('0.0.0.0', LISTEN_PORT))
+    server.listen(1000)
+    while True:
+        try:
+            client, _ = server.accept()
+            threading.Thread(target=handle_client, args=(client,), daemon=True).start()
+        except:
+            pass
+
+if __name__ == '__main__':
+    main()
+EOF_BH
+            sed -i "s/PUERTO_ESCUCHA/$p_bh/g" /etc/bhttp/bhttp_proxy.py
+            sed -i "s/PUERTO_SSH/$p_dest/g" /etc/bhttp/bhttp_proxy.py
+
+            echo -e "BHTTP_PORT=\"$p_bh\"\nBHTTP_DEST=\"$p_dest\"" > /etc/bhttp/config
+
+            cat << 'EOF_BHS' > /etc/systemd/system/bhttp-server.service
+[Unit]
+Description=BHTTP Fast WebSocket Native Server
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /etc/bhttp/bhttp_proxy.py
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF_BHS
+
+            systemctl daemon-reload
+            systemctl enable bhttp-server >/dev/null 2>&1
+            systemctl restart bhttp-server
+
+            iptables -I INPUT -p tcp --dport $p_bh -j ACCEPT >/dev/null 2>&1
+            ufw allow $p_bh/tcp >/dev/null 2>&1
+
+            sleep 2
+            if systemctl is-active --quiet bhttp-server && ss -tlnp | grep -qE ":${p_bh}\b"; then
+                echo -e "\n ${V}¡BHTTP Server Instalado y Activo en el puerto $p_bh!   ${N}"
+            else
+                echo -e "\n ${R}Error al iniciar BHTTP Server. Revisa si el puerto estaba libre.   ${N}"
+            fi
+            echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
+            ;;
+        2)
+            clear
+            echo -e "${C}================================================${N}"
+            echo -e "     ${A}📱 CONFIGURACIÓN PARA BHTTP / HTTP CUSTOM 📱   ${N}"
+            echo -e "${C}================================================${N}"
+            echo -e " ${W}🔹 Servidor / Host :${N} ${V}$IP_VPS   ${N}"
+            echo -e " ${W}🔹 Puerto Remoto   :${N} ${V}$BHTTP_PORT   ${N}"
+            echo -e " ${W}🔹 Redirección SSH :${N} ${A}$BHTTP_DEST   ${N}"
+            echo -e "${C}────────────────────────────────────────────────${N}"
+            echo -e " ${V}Payload Directo (Sin Saldo / Bug Host):${N}"
+            echo -e " ${A}GET / HTTP/1.1[crlf]Host: tudominio.com[crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]${N}"
+            echo -e "${C}────────────────────────────────────────────────${N}"
+            echo -e " ${W}Coloca tu usuario y contraseña SSH creados en el menú [01].${N}"
+            echo -e "${C}================================================${N}"
+            echo -e "\n ${W}► Presiona Enter para volver...${N}"; read
+            ;;
+        3)
+            if [ ! -f /etc/bhttp/config ]; then
+                echo -e "\n ${R}BHTTP Server no está instalado.${N}"
+                sleep 1; continue
+            fi
+            echo -e "\n ${W}► Ingresa el NUEVO puerto para BHTTP:${N}"
+            echo -ne " ${V}► ${N}"; read n_pt
+            if [[ "$n_pt" =~ ^[0-9]+$ ]]; then
+                liberar_puerto_fantasma "$n_pt" "bhttp"
+                sed -i "s/LISTEN_PORT = .*/LISTEN_PORT = $n_pt/g" /etc/bhttp/bhttp_proxy.py
+                sed -i "s/BHTTP_PORT=.*/BHTTP_PORT=\"$n_pt\"/g" /etc/bhttp/config
+                systemctl restart bhttp-server
+                iptables -I INPUT -p tcp --dport $n_pt -j ACCEPT >/dev/null 2>&1
+                ufw allow $n_pt/tcp >/dev/null 2>&1
+                echo -e "\n ${V}¡Puerto actualizado a $n_pt con éxito!   ${N}"
+            else
+                echo -e "\n ${R}Puerto no válido.   ${N}"
+            fi
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        4)
+            systemctl restart bhttp-server 2>/dev/null
+            echo -e "\n ${V}¡BHTTP Server reiniciado correctamente!   ${N}"
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        5)
+            systemctl stop bhttp-server 2>/dev/null
+            echo -e "\n ${A}BHTTP Server detenido.   ${N}"
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        6)
+            clear
+            echo -e "${A}=== LOGS EN VIVO BHTTP SERVER ===${N}"
+            journalctl -u bhttp-server -n 30 --no-pager
+            echo -e "\n ${W}► Presiona Enter para regresar...${N}"; read
+            ;;
+        7)
+            resetear_bhttp_completo
+            echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
+            ;;
+        0) break ;;
+        *) echo -e " ${R}Opción inválida.   ${N}"; sleep 1 ;;
+    esac
+done
+}
+
+# ==========================================
+# MÓDULO 37: HCR SERVER (NATIVO TLS 1.3 / PLAIN MULTIHILO)
+# ==========================================
+menu_hcr() {
+while true; do
+    clear
+    ESTADO=$(systemctl is-active --quiet hcr-server && echo -e "${V}[ ACTIVO ]${N}" || echo -e "${R}[ INACTIVO ]${N}")
+
+    if [ -f /etc/hcr/config ]; then
+        source /etc/hcr/config 2>/dev/null
+    else
+        P_INJ="8080"
+        P_DEST="22"
+        MODO="TLS"
+    fi
+
+    echo -e "${C}================================================${N}"
+    echo -e "       ${W}MENU HCR [HTTP C.] - Estado:${N} $ESTADO"
+    echo -e "${C}================================================${N}"
+    echo -e " ${W}🔹 Puerto Inyección :${N} ${V}$P_INJ${N}  ${W}| Destino :${N} ${A}$P_DEST${N}  ${W}| Modo :${N} ${M}$MODO${N}"
+    echo -e "${C}────────────────────────────────────────────────────────${N}"
+    echo -e " ${V}[1]${N} ${W}🟢 Instalar / Configurar HCR Server   ${N}"
+    echo -e " ${A}[2]${N} ${W}👁️ Ver Configuración para HTTP Custom   ${N}"
+    echo -e " ${C}[3]${N} ${W}🔄 Reiniciar HCR Server   ${N}"
+    echo -e " ${A}[4]${N} ${W}⏸️  Detener HCR Server   ${N}"
+    echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar HCR Server   ${N}"
+    echo -e " ${C}[6]${N} ${W}📜 Ver Errores / Logs del Servidor   ${N}"
+    echo -e " ${C}[0]${N} ${W}↩️  REGRESAR   ${N}"
     echo -e "${C}================================================${N}"
     echo -ne " ${W}► Opcion : ${N}"; read op_hcr
 
     case $op_hcr in
-        1|2|3)
-            echo -e " ${W}Para cambiar puertos o modos, usa la Opción 5 de Instalación.   ${N}"
-            sleep 1
+        1) instalar_hcr ;;
+        2)
+            clear
+            echo -e "${C}================================================${N}"
+            echo -e "        ${A}📱 CONFIGURACIÓN EXACTA HTTP CUSTOM 📱   ${N}"
+            echo -e "${C}================================================${N}"
+            echo -e " ${W}1. En la pantalla principal de HTTP Custom:${N}"
+            echo -e "    🔹 Modo         : ${V}Pestaña HCR${N}"
+            echo -e "    🔹 Host:puerto  : ${V}$IP_VPS:$P_INJ${N}"
+            echo -e "    🔹 Usuario SSH  : ${A}El que creaste en el menú [01]${N}"
+            echo -e "    🔹 Passwd SSH   : ${A}Tu contraseña SSH${N}"
+            echo -e "${C}────────────────────────────────────────────────────────${N}"
+            if [ "$MODO" == "TLS" ]; then
+                echo -e " ${W}2. Interruptores en la app:${N}"
+                echo -e "    ☑️ ${V}Activar TLS      : ENCENDIDO (Azul)${N}"
+                echo -e "    ☑️ ${V}Permitir inseguro: ENCENDIDO (Azul)${N}"
+            else
+                echo -e " ${W}2. Interruptores en la app:${N}"
+                echo -e "    ⬜ ${R}Activar TLS      : APAGADO${N}"
+                echo -e "    ⬜ ${R}Permitir inseguro: APAGADO${N}"
+            fi
+            echo -e "${C}────────────────────────────────────────────────────────${N}"
+            echo -e " ${A}NOTA: En modo HCR no se usa cajita de Payload.${N}"
+            echo -e "${C}================================================${N}"
+            echo -e "\n ${W}► Presiona Enter para volver...${N}"; read
+            ;;
+        3)
+            systemctl restart hcr-server 2>/dev/null
+            echo -e "\n ${V}¡HCR Server reiniciado!   ${N}"
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
+            ;;
+        4)
+            systemctl stop hcr-server 2>/dev/null
+            echo -e "\n ${A}HCR Server detenido.   ${N}"
+            echo -e "\n ${W}► Presiona Enter...${N}"; read
             ;;
         5)
-            instalar_hcr
+            resetear_hcr_completo
+            echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
             ;;
         6)
-            resetear_hcr_completo
-            systemctl disable hcr-server 2>/dev/null
-            echo -e " ${R}HCR Desinstalado y Limpiado.   ${N}"; sleep 1
-            ;;
-        7)
             clear
             echo -e "${A}=== LOGS DEL MOTOR HCR ===   ${N}"
-            journalctl -u hcr-server -n 40 --no-pager
+            journalctl -u hcr-server -n 30 --no-pager
             echo -e "\n ${W}► Presiona Enter para regresar...${N}"; read
             ;;
         0) break ;;
@@ -1934,100 +2227,155 @@ done
 
 instalar_hcr() {
     clear
-    echo -e "${A}========= INSTALACION HCR SERVER =========   ${N}"
-    mkdir -p /etc/hcr
-
+    echo -e "${A}========= INSTALACIÓN NATIVA HCR SERVER =========   ${N}"
     echo -e " ${W}► Puerto de Inyección [Default 8080]:${N}"
     echo -ne " ${V}► ${N}"; read p_inj
     p_inj=${p_inj:-8080}
 
-    echo -e " ${W}► Puerto de redireccionamiento [Default 22]:${N}"
+    echo -e " ${W}► Puerto Local de Redirección (SSH) [Default 22]:${N}"
     echo -ne " ${V}► ${N}"; read p_dest
     p_dest=${p_dest:-22}
 
-    echo -e "\n ${W}Seleccione Modo de transporte:   ${N}"
-    echo -e " ${W}[1] Plain (Recomendado para HTTP Custom clásico)   ${N}"
-    echo -e " ${W}[2] TLS (Con certificado SSL)   ${N}"
-    echo -e " ${W}► Opcion [Default 1]:${N}"
+    echo -e "\n ${W}Seleccione Modo de Transporte para HCR:${N}"
+    echo -e " ${V}[1] TLS   ${N}${W}(Recomendado: Compatible con 'Activar TLS' en HTTP Custom)   ${N}"
+    echo -e " ${V}[2] Plain ${N}${W}(Sin SSL, directo TCP)   ${N}"
+    echo -e " ${W}► Opción [Default 1]:${N}"
     echo -ne " ${V}► ${N}"; read op_m
     op_m=${op_m:-1}
 
+    mkdir -p /etc/hcr
+    liberar_puerto_fantasma "$p_inj" "hcr"
+    apt-get update -y >/dev/null 2>&1
+    apt-get install stunnel4 openssl python3 lsof psmisc -y >/dev/null 2>&1
+
     if [ "$op_m" == "2" ]; then
-        MODO="TLS"
-        echo -e "\n ${A}Generando certificado TLS...   ${N}"
-        apt-get install openssl -y >/dev/null 2>&1
-        openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
-        -subj "/C=CO/ST=Santander/L=ZeroDay/O=ZeroDay/CN=MiVPS" \
-        -keyout /etc/hcr/hcr.key -out /etc/hcr/hcr.crt > /dev/null 2>&1
-    else
         MODO="Plain"
+        cat << 'EOF_HCP' > /etc/hcr/hcr_plain.py
+import socket, threading, sys
+P_IN = PUERTO_HCR_INJ
+P_OUT = PUERTO_HCR_DEST
+def f(a, b):
+    try:
+        while True:
+            d = a.recv(65536)
+            if not d: break
+            b.sendall(d)
+    except: pass
+    finally:
+        try: a.close()
+        except: pass
+        try: b.close()
+        except: pass
+
+def h(c):
+    s = None
+    try:
+        c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        c.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+        s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+        s.connect(('127.0.0.1', P_OUT))
+        threading.Thread(target=f, args=(c, s), daemon=True).start()
+        threading.Thread(target=f, args=(s, c), daemon=True).start()
+    except:
+        try: c.close()
+        except: pass
+        if s:
+            try: s.close()
+            except: pass
+
+def main():
+    srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    srv.bind(('0.0.0.0', P_IN))
+    srv.listen(500)
+    while True:
+        try:
+            cl, _ = srv.accept()
+            threading.Thread(target=h, args=(cl,), daemon=True).start()
+        except: pass
+
+if __name__ == '__main__':
+    main()
+EOF_HCP
+        sed -i "s/PUERTO_HCR_INJ/$p_inj/g" /etc/hcr/hcr_plain.py
+        sed -i "s/PUERTO_HCR_DEST/$p_dest/g" /etc/hcr/hcr_plain.py
+
+        cat << 'EOF_HCRS' > /etc/systemd/system/hcr-server.service
+[Unit]
+Description=HCR Native Plain Server (ZeroDay)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=/usr/bin/python3 /etc/hcr/hcr_plain.py
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF_HCRS
+    else
+        MODO="TLS"
+        openssl req -new -newkey rsa:2048 -days 3650 -nodes -x509 \
+            -subj "/CN=HCR-Server/O=ZeroDay/C=CO" \
+            -keyout /etc/hcr/hcr.pem -out /etc/hcr/hcr.pem >/dev/null 2>&1
+        chmod 600 /etc/hcr/hcr.pem
+
+        cat << EOF_ST > /etc/hcr/hcr_server.conf
+pid = /var/run/hcr_stunnel.pid
+cert = /etc/hcr/hcr.pem
+client = no
+socket = a:SO_REUSEADDR=1
+socket = l:TCP_NODELAY=1
+socket = r:TCP_NODELAY=1
+socket = l:SO_KEEPALIVE=1
+socket = r:SO_KEEPALIVE=1
+TIMEOUTidle = 86400
+TIMEOUTclose = 0
+TIMEOUTconnect = 300
+
+[hcr-tunnel]
+accept = $p_inj
+connect = 127.0.0.1:$p_dest
+EOF_ST
+
+        cat << 'EOF_HCRS' > /etc/systemd/system/hcr-server.service
+[Unit]
+Description=HCR Native TLS High-Performance Tunnel (ZeroDay)
+After=network.target
+
+[Service]
+Type=forking
+PIDFile=/var/run/hcr_stunnel.pid
+ExecStart=/usr/bin/stunnel4 /etc/hcr/hcr_server.conf
+Restart=always
+RestartSec=2
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF_HCRS
     fi
 
     echo -e "P_INJ=\"$p_inj\"\nP_DEST=\"$p_dest\"\nMODO=\"$MODO\"" > /etc/hcr/config
 
-    echo -e " ${C}Descargando Binario HCR Original...   ${N}"
-    rm -f /etc/hcr/hcr-server
-    apt-get update -y >/dev/null 2>&1
-    apt-get install curl wget lsof coreutils psmisc -y >/dev/null 2>&1
-
-    MIRRORS=(
-    "https://raw.githubusercontent.com/familipicomartinez-oss/menu22/main/hcr-server"
-)
-
-    DESCARGA_EXITOSA=0
-    for url in "${MIRRORS[@]}"; do
-        echo -e " ${W}► Probando fuente: ${url:8:35}...   ${N}"
-        curl -4 -sL --connect-timeout 10 "$url" -o /etc/hcr/hcr-server
-
-        TAMANO=$(wc -c < /etc/hcr/hcr-server 2>/dev/null || echo 0)
-        echo -e "   ${W}-> Tamaño obtenido: $TAMANO bytes   ${N}"
-
-        if [ "$TAMANO" -gt 1000000 ]; then
-            echo -e " ${V}¡Archivo binario original descargado correctamente!   ${N}"
-            DESCARGA_EXITOSA=1
-            break
-        fi
-        rm -f /etc/hcr/hcr-server
-    done
-
-    if [ "$DESCARGA_EXITOSA" -eq 0 ]; then
-        echo -e "\n ${R}[!] ERROR CRÍTICO DE RED [!]   ${N}"
-        echo -e " ${A}Ningún servidor entregó el archivo válido.   ${N}"
-        echo -e "\n ${W}► Presiona Enter para regresar...${N}"; read
-        return
-    fi
-
-    chmod 777 /etc/hcr/hcr-server
-
-    cat << 'EOF' > /etc/hcr/start.sh
-#!/bin/bash
-source /etc/hcr/config
-cd /etc/hcr
-
-if [ "$MODO" == "TLS" ]; then
-    ./hcr-server -listen :$P_INJ -transport tls -tls-cert /etc/hcr/hcr.crt -tls-key /etc/hcr/hcr.key || ./hcr-server -port $P_INJ -transport tls -tls-cert /etc/hcr/hcr.crt -tls-key /etc/hcr/hcr.key
-else
-    ./hcr-server -listen :$P_INJ -transport plain || ./hcr-server -port $P_INJ -transport plain
-fi
-EOF
-    chmod +x /etc/hcr/start.sh
-
-    echo -e "[Unit]\nDescription=HCR Server Custom\nAfter=network.target\n\n[Service]\nType=simple\nExecStart=/etc/hcr/start.sh\nRestart=always\nRestartSec=3\nLimitNOFILE=65535\n\n[Install]\nWantedBy=multi-user.target" > /etc/systemd/system/hcr-server.service
-
-    liberar_puerto_fantasma "$p_inj" "hcr"
+    iptables -I INPUT -p tcp --dport $p_inj -j ACCEPT >/dev/null 2>&1
+    ufw allow $p_inj/tcp >/dev/null 2>&1
 
     systemctl daemon-reload
     systemctl enable hcr-server >/dev/null 2>&1
     systemctl restart hcr-server
 
-    iptables -I INPUT -p tcp --dport $p_inj -j ACCEPT >/dev/null 2>&1
-    ufw allow $p_inj/tcp >/dev/null 2>&1
-
-    sleep 3
-    if ss -tlnp | grep -qE ":${p_inj}\b"; then
-        echo -e "\n ${V}¡ÉXITO! El motor HCR encendió y el puerto $p_inj está verificado como ABIERTO.   ${N}"
+    sleep 2
+    if systemctl is-active --quiet hcr-server && ss -tlnp | grep -qE ":${p_inj}\b"; then
+        echo -e "\n ${V}¡HCR SERVER NATIVO OPERATIVO EN PUERTO $p_inj [$MODO]!   ${N}"
+        echo -e " ${W}En HTTP Custom: pestaña HCR, Activar TLS y Permitir inseguro encendidos.${N}"
     else
-        echo -e "\n ${R}El motor falló al intentar abrir el puerto. Usa la Opción 7 para ver el log técnico.   ${N}"
+        echo -e "\n ${R}Error: HCR no pudo encender. Revisa que el puerto esté libre.   ${N}"
     fi
     echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
 }
@@ -2379,6 +2727,7 @@ PDNS=$(es slowdns)
 PSSR=$(es ssr-server)
 PREAL=$(es xray-reality)
 P15=$(systemctl is-active --quiet stunnel4 && grep -q "stunnel-python" /etc/stunnel/stunnel.conf 2>/dev/null && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+PBHTTP=$(es bhttp-server)
 
 echo -e "${A}🍄 INSTALACION DE PROTOCOLOS ( Script ZeroDay ) 🍄   ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
@@ -2402,7 +2751,7 @@ echo -e " ${C}[27]${N} ${W}DETALLES DEL VPS     ${C}[28]${N} ${W}BLOCK ADS      
 echo -e " ${C}[29]${N} ${W}DNS CUSTOM (NETFLIX) ${C}[30]${N} ${W}ZONA HORARIA (RELOJ)  ${N}"
 echo -e " ${C}[31]${N} ${W}REINICIAR SERVICIOS  ${C}[32]${N} ${W}Brook Server   ${R}[OFF]  ${N}"
 echo -e " ${C}[33]${N} ${W}FIREWALL (IPTABLES)  ${C}[34]${N} ${W}Enable/Change PASSWD ROOT  ${N}"
-echo -e " ${C}[35]${N} ${W}AToken [APPs]  ${R}[OFF]${N} ${C}[36]${N} ${W}BHTTP [APPs]   ${R}[OFF]  ${N}"
+echo -e " ${C}[35]${N} ${W}AToken [APPs]  ${R}[OFF]${N} ${C}[36]${N} ${W}BHTTP [APPs]   ${N}$PBHTTP"
 echo -e " ${C}[37]${N} ${W}HCR [HTTP C.]  ${N}$PHCR ${C}[0]${N}  ${R}[ REGRESAR ]  ${N}"
 echo -e "${C}--------------------------------------------------------${N}"
 echo -ne " ${W}► Opcion : ${N}"; read op_inst
@@ -2422,9 +2771,10 @@ case $op_inst in
 26) curl -s https://raw.githubusercontent.com/sivel/speedtest-cli/master/speedtest.py | python3 -; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 27) info_sistema; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 30) menu_zona_horaria ;;
-31) optimizar_sshd_estabilidad; systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; systemctl restart stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server xray-reality >/dev/null 2>&1; echo " Reiniciado   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
-33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+31) optimizar_sshd_estabilidad; systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null; systemctl restart stunnel4 proxypy udp-custom fail2ban xray hcr-server slowdns ssr-server xray-reality bhttp-server >/dev/null 2>&1; echo " Reiniciado   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+33) ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8888/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo " Puertos Abiertos   "; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 34) passwd root; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+36) menu_bhttp ;;
 37) menu_hcr ;;
 0) break ;;
 *) echo -e " ${R}Inválido   ${N}"; sleep 1 ;;
@@ -2449,7 +2799,7 @@ echo -e "${C}──────────────────────�
 echo -ne " ${W}► Opcion : ${N}"; read opcion
 case $opcion in
 1|01) menu_usuarios ;;
-2|02) clear; optimizar_sshd_estabilidad; limpiar_basura_disco; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+2|02) clear; optimizar_sshd_estabilidad; limpiar_basura_disco; ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 444/tcp; ufw allow 8080/tcp; ufw allow 8888/tcp; ufw allow 8443/tcp; ufw allow 53/udp; ufw allow 5300/udp; ufw allow 36712/udp; ufw allow 7200/udp; ufw allow 7300/udp; ufw --force enable; echo -e " ${V}Firewall y Red Optimizados.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 3|03) ver_usuarios_online ;;
 4|04|5|05|8|08) menu_protocolos ;;
 6|06) configurar_banner ;;
