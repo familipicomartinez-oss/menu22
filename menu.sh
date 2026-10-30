@@ -164,7 +164,7 @@ resetear_v2ray_completo() {
     systemctl stop v2ray >/dev/null 2>&1
     pkill -9 xray >/dev/null 2>&1
     pkill -9 v2ray >/dev/null 2>&1
-    rm -f /usr/local/etc/xray/puerto.txt /usr/local/etc/xray/config.json
+    rm -rf /usr/local/etc/xray
     systemctl daemon-reload
     echo -e " ${V}✓ Puertos y rastros de V2Ray/Xray reseteados por completo.   ${N}"
 }
@@ -423,7 +423,7 @@ echo -e "${C}──────────────────────�
 echo -e " ${W}🔹 S.O:  ${N}${V}$S_OS${N}  ${W}🔹 Base:  ${N}${V}$S_ARCH${N}  ${W}🔹 CPU:  ${N}${V}$S_CPU  ${N}"
 echo -e " ${W}🔹 IP:  ${N}${V}$IP_VPS${N}  ${W}🔹 FECHA:  ${N}${A}$FECHA_ACT  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V5.9)  ${N}"
+echo -e " ${W}Key: ${V}Verified [ ZeroDay © ] (V6.0)  ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -e " ${M}🟢 PUERTOS ACTIVOS:   ${N}"
 echo -e " $STR_PORTS"
@@ -1376,20 +1376,79 @@ esac
 done
 }
 
+# ==========================================
+# GESTOR INDIVIDUAL DE CLIENTES V2RAY/XRAY (VMESS)
+# ==========================================
+v2ray_generar_link_vmess() {
+    local u_uuid=$1
+    local u_nombre=$2
+    local dom_v2=$(cat /usr/local/etc/xray/dominio.txt 2>/dev/null | tr -d ' \n\r')
+    local pt_v2=$(cat /usr/local/etc/xray/puerto.txt 2>/dev/null | tr -d ' \n\r')
+    cat <<EOF > /tmp/vmess_tmp.json
+{
+  "v": "2",
+  "ps": "$u_nombre",
+  "add": "$IP_VPS",
+  "port": "$pt_v2",
+  "id": "$u_uuid",
+  "aid": "0",
+  "scy": "auto",
+  "net": "ws",
+  "type": "none",
+  "host": "$dom_v2",
+  "path": "/zeroday",
+  "tls": "tls",
+  "sni": "$dom_v2",
+  "alpn": ""
+}
+EOF
+    local b64_vm=$(cat /tmp/vmess_tmp.json | base64 -w 0)
+    rm -f /tmp/vmess_tmp.json
+    echo "vmess://$b64_vm"
+}
+
+v2ray_sincronizar_json() {
+    python3 - << 'EOF_PY'
+import json
+
+db_path = "/usr/local/etc/xray/usuarios.db"
+cfg_path = "/usr/local/etc/xray/config.json"
+
+try:
+    with open(db_path, "r") as f:
+        lines = [line.strip().split(":") for line in f if line.strip() and ":" in line]
+
+    clients = [{"id": parts[1], "alterId": 0, "email": parts[0]} for parts in lines]
+
+    with open(cfg_path, "r") as f:
+        cfg = json.load(f)
+
+    if cfg.get("inbounds") and len(cfg["inbounds"]) > 0:
+        cfg["inbounds"][0]["settings"]["clients"] = clients
+
+    with open(cfg_path, "w") as f:
+        json.dump(cfg, f, indent=2)
+except Exception as e:
+    pass
+EOF_PY
+}
+
 menu_v2ray() {
 while true; do
 clear
 P_V2=$(systemctl is-active --quiet xray && echo -e "${V}[ON]${N}" || echo -e "${R}[OFF]${N}")
+C_USERS=$( [ -f /usr/local/etc/xray/usuarios.db ] && grep -c ":" /usr/local/etc/xray/usuarios.db 2>/dev/null || echo 0 )
 echo -e "${C}================================================${N}"
 echo -e "     ${A}⚜️  V2RAY / XRAY MANAGER (WebSocket) ⚜️   ${N}"
 echo -e "${C}================================================${N}"
-echo -e " ${W}Estado actual:${N} $P_V2"
+echo -e " ${W}Estado actual :${N} $P_V2  ${W}| Clientes Activos :${N} ${A}$C_USERS${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
-echo -e " ${V}[1]${N} ${W}🟢 Instalar V2Ray/Xray (Modo WebSocket)   ${N}"
-echo -e " ${A}[2]${N} ${W}➕ Generar Nuevo Usuario (UUID)   ${N}"
-echo -e " ${C}[3]${N} ${W}⚙️  Modificar Puerto de Conexión   ${N}"
-echo -e " ${V}[4]${N} ${W}👁️  Ver mis Datos y Link de Conexión   ${N}"
-echo -e " ${R}[5]${N} ${W}🗑️  Desinstalar / Resetear Todo V2Ray   ${N}"
+echo -e " ${V}[1]${N} ${W}🟢 Instalar / Reconfigurar V2Ray (Base)   ${N}"
+echo -e " ${V}[2]${N} ${W}➕ Crear Nuevo Cliente (Nombre + UUID + Link)   ${N}"
+echo -e " ${R}[3]${N} ${W}🗑️  Eliminar un Cliente Específico   ${N}"
+echo -e " ${A}[4]${N} ${W}👥 Listar Clientes y Ver Links VMess   ${N}"
+echo -e " ${C}[5]${N} ${W}⚙️  Modificar Puerto de Conexión   ${N}"
+echo -e " ${R}[6]${N} ${W}🗑️  Desinstalar / Resetear Todo V2Ray   ${N}"
 echo -e " ${C}[0]${N} ${W}↩️  Volver al Menú Principal   ${N}"
 echo -e "${C}────────────────────────────────────────────────────────${N}"
 echo -ne " ${W}► Opcion : ${N}"; read op_v2
@@ -1398,7 +1457,7 @@ case $op_v2 in
     clear
     echo -e "${C}=== INSTALANDO NUCLEO XRAY (V2RAY OFICIAL) ===   ${N}"
     apt-get update -y >/dev/null 2>&1
-    apt-get install -y jq uuid-runtime curl psmisc lsof openssl >/dev/null 2>&1
+    apt-get install -y jq uuid-runtime curl psmisc lsof openssl python3 >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
 
     echo -e "\n${C}=== CONFIGURANDO CONEXIÓN WEBSOCKET ===   ${N}"
@@ -1408,7 +1467,10 @@ case $op_v2 in
     echo -e " ${W}► Tu Dominio o SNI (Ej: movistar.com):${N}"
     echo -ne " ${V}► ${N}"; read dom_v2; dom_v2=${dom_v2:-$IP_VPS}
 
-    UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
+    echo -e " ${W}► Nombre del primer usuario (Ej: Admin):${N}"
+    echo -ne " ${V}► ${N}"; read primer_user; primer_user=${primer_user:-Admin}
+
+    UUID_P=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
 
     systemctl stop xray apache2 nginx dropbear stunnel4 2>/dev/null
     liberar_puerto_fantasma "$pt_v2" "v2ray"
@@ -1431,8 +1493,9 @@ case $op_v2 in
       "settings": {
         "clients": [
           {
-            "id": "$UUID",
-            "alterId": 0
+            "id": "$UUID_P",
+            "alterId": 0,
+            "email": "$primer_user"
           }
         ]
       },
@@ -1463,7 +1526,7 @@ case $op_v2 in
 EOF
     echo "$dom_v2" > /usr/local/etc/xray/dominio.txt
     echo "$pt_v2" > /usr/local/etc/xray/puerto.txt
-    echo "$UUID" > /usr/local/etc/xray/uuid.txt
+    echo "$primer_user:$UUID_P" > /usr/local/etc/xray/usuarios.db
 
     iptables -I INPUT -p tcp --dport $pt_v2 -j ACCEPT >/dev/null 2>&1
     ufw allow $pt_v2/tcp >/dev/null 2>&1
@@ -1474,6 +1537,10 @@ EOF
     sleep 2
     if systemctl is-active --quiet xray && ss -tlnp | grep -qE ":${pt_v2}\b"; then
         echo -e "\n ${V}¡V2Ray Instalado y Activo con TLS en puerto $pt_v2!   ${N}"
+        LNK_PRIMER=$(v2ray_generar_link_vmess "$UUID_P" "$primer_user")
+        echo -e "\n 👤 ${W}Cliente Creado :${N} ${A}$primer_user${N}"
+        echo -e " 🔑 ${W}UUID           :${N} ${V}$UUID_P${N}"
+        echo -e "\n 🔗 ${A}$LNK_PRIMER${N}"
     else
         echo -e "\n ${R}ERROR: V2Ray no pudo iniciar. Detalles de SystemD:   ${N}"
         journalctl -u xray.service -n 5 --no-pager
@@ -1481,16 +1548,113 @@ EOF
     echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 2)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
-        echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
+        echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"
+        echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read
+        continue
     fi
-    UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
-    sed -i -E "s/\"id\": \".*\"/\"id\": \"$UUID\"/" /usr/local/etc/xray/config.json
-    echo "$UUID" > /usr/local/etc/xray/uuid.txt
+    clear
+    echo -e "${C}=== CREAR NUEVO CLIENTE V2RAY / VMESS ===${N}"
+    echo -e " ${W}► Ingresa el Nombre o Alias del Cliente (Ej: Pedro, Juan_VIP):${N}"
+    echo -ne " ${V}► ${N}"; read nuevo_u
+    nuevo_u=$(echo "$nuevo_u" | tr -d ' :')
+
+    if [ -z "$nuevo_u" ]; then
+        echo -e " ${R}Nombre inválido. Cancelado.${N}"
+        echo -e "\n ${W}► Presiona Enter...${N}"; read
+        continue
+    fi
+
+    if grep -q "^$nuevo_u:" /usr/local/etc/xray/usuarios.db 2>/dev/null; then
+        echo -e " ${R}¡Ya existe un cliente con ese nombre! Elige otro nombre.${N}"
+        echo -e "\n ${W}► Presiona Enter...${N}"; read
+        continue
+    fi
+
+    N_UUID=$(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid)
+    echo "$nuevo_u:$N_UUID" >> /usr/local/etc/xray/usuarios.db
+    v2ray_sincronizar_json
     systemctl restart xray
-    echo -e " ${V}¡Nuevo UUID generado y configurado exitosamente!   ${N}"
-    echo -e " ${W}Nuevo UUID:${N} $UUID"
+
+    LINK_IND=$(v2ray_generar_link_vmess "$N_UUID" "$nuevo_u")
+    dom_v2=$(cat /usr/local/etc/xray/dominio.txt 2>/dev/null | tr -d ' \n\r')
+    pt_v2=$(cat /usr/local/etc/xray/puerto.txt 2>/dev/null | tr -d ' \n\r')
+
+    clear
+    echo -e "${C}================================================${N}"
+    echo -e "     ${V}¡CLIENTE V2RAY REGISTRADO CON ÉXITO!   ${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " 👤 ${W}Cliente  : ${V}$nuevo_u${N}"
+    echo -e " 🔑 ${W}UUID     : ${A}$N_UUID${N}"
+    echo -e " 🌐 ${W}Host/SNI : ${V}$dom_v2${N}"
+    echo -e " 🚪 ${W}Puerto   : ${V}$pt_v2${N}"
+    echo -e "${C}────────────────────────────────────────────────────────${N}"
+    echo -e " 🔗 ${V}LINK VMESS INDIVIDUAL (Copia y entrega a tu cliente):${N}\n"
+    echo -e " ${A}$LINK_IND${N}\n"
+    echo -e "${C}================================================${N}"
     echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
 3)
+    if [ ! -f /usr/local/etc/xray/usuarios.db ] || [ ! -s /usr/local/etc/xray/usuarios.db ]; then
+        echo -e " ${R}No hay clientes creados en V2Ray.${N}"
+        echo -e "\n ${W}► Presiona Enter...${N}"; read
+        continue
+    fi
+    clear
+    echo -e "${C}=== ELIMINAR CLIENTE V2RAY / VMESS ===${N}"
+    echo -e " ${W}Selecciona el cliente a eliminar:${N}\n"
+    i=1
+    declare -A lista_nombres
+    while IFS=":" read -r name uid; do
+        [ -z "$name" ] && continue
+        echo -e " ${V}[$i]${N} ${W}$name${N} (UUID: ${A}${uid:0:8}...${N})"
+        lista_nombres[$i]="$name"
+        ((i++))
+    done < /usr/local/etc/xray/usuarios.db
+
+    echo -e "\n ${W}► Ingresa el NÚMERO o NOMBRE del cliente a borrar:${N}"
+    echo -ne " ${R}► ${N}"; read sel_del
+    [ -z "$sel_del" ] && continue
+
+    target_del=""
+    if [[ "$sel_del" =~ ^[0-9]+$ ]] && [ -n "${lista_nombres[$sel_del]}" ]; then
+        target_del="${lista_nombres[$sel_del]}"
+    elif grep -q "^$sel_del:" /usr/local/etc/xray/usuarios.db 2>/dev/null; then
+        target_del="$sel_del"
+    fi
+
+    if [ -n "$target_del" ]; then
+        sed -i "/^$target_del:/d" /usr/local/etc/xray/usuarios.db
+        v2ray_sincronizar_json
+        systemctl restart xray
+        echo -e "\n ${V}✓ Cliente '${target_del}' y su UUID fueron eliminados de raíz.${N}"
+        echo -e " ${A}Su enlace VMess quedó invalidado de inmediato.${N}"
+    else
+        echo -e "\n ${R}Cliente no encontrado.${N}"
+    fi
+    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
+4)
+    if [ ! -f /usr/local/etc/xray/usuarios.db ] || [ ! -s /usr/local/etc/xray/usuarios.db ]; then
+        echo -e " ${R}No hay clientes creados en V2Ray.${N}"
+        echo -e "\n ${W}► Presiona Enter...${N}"; read
+        continue
+    fi
+    clear
+    dom_v2=$(cat /usr/local/etc/xray/dominio.txt 2>/dev/null | tr -d ' \n\r')
+    pt_v2=$(cat /usr/local/etc/xray/puerto.txt 2>/dev/null | tr -d ' \n\r')
+    echo -e "${C}================================================${N}"
+    echo -e "        ${A}👥 LISTADO DE CLIENTES V2RAY 👥   ${N}"
+    echo -e "${C}================================================${N}"
+    echo -e " ${W}Dominio : ${V}$dom_v2${N} | ${W}Puerto : ${V}$pt_v2${N}"
+    echo -e "${C}────────────────────────────────────────────────────────${N}"
+    while IFS=":" read -r name uid; do
+        [ -z "$name" ] && continue
+        L_VM=$(v2ray_generar_link_vmess "$uid" "$name")
+        echo -e " 👤 ${W}Cliente : ${V}$name${N}"
+        echo -e " 🔑 ${W}UUID    : ${A}$uid${N}"
+        echo -e " 🔗 ${W}Link    : ${C}$L_VM${N}"
+        echo -e "${C}--------------------------------------------------------${N}"
+    done < /usr/local/etc/xray/usuarios.db
+    echo -e "\n ${W}► Presiona Enter para volver...${N}"; read ;;
+5)
     if [ ! -f /usr/local/etc/xray/config.json ]; then
         echo -e " ${R}V2Ray no está instalado. Instálalo primero (Opción 1).   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
     fi
@@ -1520,49 +1684,7 @@ EOF
         echo -e "\n ${R}ERROR: El puerto $pt_nuevo está bloqueado por el sistema. Intenta con otro.   ${N}"
     fi
     echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
-4)
-    if [ ! -f /usr/local/etc/xray/config.json ]; then
-        echo -e " ${R}V2Ray no está instalado.   ${N}"; echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read; continue
-    fi
-    dom_v2=$(cat /usr/local/etc/xray/dominio.txt | tr -d ' \n\r')
-    pt_v2=$(cat /usr/local/etc/xray/puerto.txt | tr -d ' \n\r')
-    UUID=$(cat /usr/local/etc/xray/uuid.txt | tr -d ' \n\r')
-
-    cat <<EOF > /tmp/vmess.json
-{
-  "v": "2",
-  "ps": "ZeroDay-V2Ray",
-  "add": "$IP_VPS",
-  "port": "$pt_v2",
-  "id": "$UUID",
-  "aid": "0",
-  "scy": "auto",
-  "net": "ws",
-  "type": "none",
-  "host": "$dom_v2",
-  "path": "/zeroday",
-  "tls": "tls",
-  "sni": "$dom_v2",
-  "alpn": ""
-}
-EOF
-    VMESS_BASE64=$(cat /tmp/vmess.json | base64 -w 0)
-    VMESS_LINK="vmess://$VMESS_BASE64"
-
-    clear
-    echo -e "${C}=== TUS DATOS DE V2RAY ===   ${N}"
-    echo -e " ${W}🔹 IP Servidor    :  ${N}${V}$IP_VPS   ${N}"
-    echo -e " ${W}🔹 Dominio / SNI  :  ${N}${V}$dom_v2   ${N}"
-    echo -e " ${W}🔹 Puerto         :  ${N}${V}$pt_v2   ${N}"
-    echo -e " ${W}🔹 UUID           :  ${N}${A}$UUID   ${N}"
-    echo -e " ${W}🔹 Protocolo      : WebSocket (WS)   ${N}"
-    echo -e " ${W}🔹 Path           : /zeroday   ${N}"
-    echo -e " ${W}🔹 Seguridad      : TLS   ${N}"
-    echo -e "${C}================================================${N}"
-    echo -e " 🔗  ${V}LINK VMESS PARA IMPORTAR (Cópialo todo):   ${N}\n"
-    echo -e " ${A}$VMESS_LINK   ${N}\n"
-    echo -e "\n ${W}► Presiona Enter para continuar...${N}"; read ;;
-5)
+6)
     resetear_v2ray_completo
     systemctl disable xray >/dev/null 2>&1
     bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ remove >/dev/null 2>&1
